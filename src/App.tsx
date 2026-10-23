@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -306,6 +306,8 @@ function App() {
   });
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const queuedTaskRef = useRef<{ title: string; scope: TaskScope } | null>(null);
+  const [autoLaunchQueuedTask, setAutoLaunchQueuedTask] = useState(false);
 
   useEffect(() => {
     void tryInvoke<AppSnapshot>("get_snapshot").then((remote) => {
@@ -540,12 +542,6 @@ function App() {
       setView("models");
       return;
     }
-    const activeTaskCount = snapshot.runs.filter((run) => run.status === "running").length;
-    if (activeTaskCount >= Math.max(1, snapshot.routing.maxParallelTasks ?? 4)) {
-      notify({ tone: "warn", text: `Osiągnięto limit równoległych zadań (${snapshot.routing.maxParallelTasks ?? 4}). Poczekaj na zakończenie jednej sesji.` });
-      setView("activity");
-      return;
-    }
     const title = task.trim() || (
       taskScope === "chat"
         ? "Odpowiedz na pytanie użytkownika"
@@ -553,6 +549,14 @@ function App() {
           ? "Przeanalizuj materiały i przedstaw najważniejsze wnioski"
           : "Przeanalizuj projekt i zaproponuj następny krok"
     );
+    const activeTaskCount = snapshot.runs.filter((run) => run.status === "running").length;
+    if (activeTaskCount >= Math.max(1, snapshot.routing.maxParallelTasks ?? 4)) {
+      queuedTaskRef.current = { title, scope: taskScope };
+      setTask("");
+      notify({ tone: "warn", text: `Zadanie dodano do kolejki. Uruchomi się po zwolnieniu miejsca (${snapshot.routing.maxParallelTasks ?? 4} równoległe sesje).` });
+      setView("activity");
+      return;
+    }
     const route = chooseProvider(snapshot.providers, activeProvider, modelOffers, snapshot.routing, taskScope, title);
     const routedProvider = route.provider;
     if (!routedProvider) {
@@ -712,6 +716,22 @@ function App() {
       });
     }
   };
+
+  useEffect(() => {
+    const queued = queuedTaskRef.current;
+    const activeTaskCount = snapshot.runs.filter((run) => run.status === "running").length;
+    if (!queued || activeTaskCount >= Math.max(1, snapshot.routing.maxParallelTasks ?? 4)) return;
+    queuedTaskRef.current = null;
+    setTaskScope(queued.scope);
+    setTask(queued.title);
+    setAutoLaunchQueuedTask(true);
+  }, [snapshot.runs, snapshot.routing.maxParallelTasks]);
+
+  useEffect(() => {
+    if (!autoLaunchQueuedTask) return;
+    setAutoLaunchQueuedTask(false);
+    void startTask();
+  }, [autoLaunchQueuedTask, task, taskScope]);
 
   const sendFollowUp = async () => {
     const followUp = followUpTask.trim();
