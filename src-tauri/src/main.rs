@@ -736,6 +736,30 @@ async fn web_fetch(url: String) -> Result<String, String> {
     Ok(text.chars().take(30_000).collect())
 }
 
+fn parse_screen_point(target: &str) -> Result<(i32, i32), String> {
+    let parts: Vec<&str> = target.split(',').map(str::trim).collect();
+    if parts.len() != 2 {
+        return Err("Współrzędne muszą mieć format x,y w zakresie 0–10000".to_string());
+    }
+    let x = parts[0]
+        .parse::<i32>()
+        .map_err(|_| "Współrzędne muszą być liczbami całkowitymi".to_string())?;
+    let y = parts[1]
+        .parse::<i32>()
+        .map_err(|_| "Współrzędne muszą być liczbami całkowitymi".to_string())?;
+    if !(0..=10_000).contains(&x) || !(0..=10_000).contains(&y) {
+        return Err("Współrzędne muszą mieć format x,y w zakresie 0–10000".to_string());
+    }
+    Ok((x, y))
+}
+
+fn validate_typing_target(target: &str) -> Result<(), String> {
+    if target.len() > 2_000 || target.contains('\0') {
+        return Err("Tekst ma nieprawidłowy format albo przekracza limit 2000 znaków".to_string());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn computer_action(action: String, target: String, approved: bool) -> Result<String, String> {
     if !approved {
@@ -753,21 +777,12 @@ fn computer_action(action: String, target: String, approved: bool) -> Result<Str
             Ok(format!("Aktywowano aplikację: {}", target.trim()))
         }
         "click" => {
-            let parts: Vec<&str> = target.split(',').map(str::trim).collect();
-            if parts.len() != 2
-                || parts.iter().any(|part| part.parse::<i32>().is_err())
-                || parts.iter().any(|part| {
-                    part.parse::<i32>().unwrap_or(-1) < 0
-                        || part.parse::<i32>().unwrap_or(0) > 10000
-                })
-            {
-                return Err("Współrzędne muszą mieć format x,y w zakresie 0–10000".to_string());
-            }
+            let (x, y) = parse_screen_point(&target)?;
             #[cfg(target_os = "macos")]
             {
                 let script = format!(
                     "tell application \"System Events\" to click at {{{}, {}}}",
-                    parts[0], parts[1]
+                    x, y
                 );
                 let output = Command::new("osascript")
                     .args(["-e", &script])
@@ -779,17 +794,13 @@ fn computer_action(action: String, target: String, approved: bool) -> Result<Str
                         String::from_utf8_lossy(&output.stderr).trim()
                     ));
                 }
-                return Ok(format!("Kliknięto w ({}, {})", parts[0], parts[1]));
+                return Ok(format!("Kliknięto w ({}, {})", x, y));
             }
             #[cfg(not(target_os = "macos"))]
             return Err("Sterowanie współrzędnymi jest dostępne tylko na macOS".to_string());
         }
         "type_text" => {
-            if target.len() > 2000 || target.contains('\0') {
-                return Err(
-                    "Tekst ma nieprawidłowy format albo przekracza limit 2000 znaków".to_string(),
-                );
-            }
+            validate_typing_target(&target)?;
             #[cfg(target_os = "macos")]
             {
                 let escaped = target.replace('\\', "\\\\").replace('"', "\\\"");
@@ -888,7 +899,10 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{uuid_like, valid_skill_manifest, validate_http_url, KEYRING_SERVICE};
+    use super::{
+        parse_screen_point, uuid_like, valid_skill_manifest, validate_http_url,
+        validate_typing_target, KEYRING_SERVICE,
+    };
     use keyring::Entry;
 
     #[test]
@@ -909,6 +923,17 @@ mod tests {
     #[test]
     fn accepts_public_https_targets() {
         assert!(validate_http_url("https://example.com/research").is_ok());
+    }
+
+    #[test]
+    fn validates_accessibility_coordinates_and_text_limits() {
+        assert_eq!(parse_screen_point("10, 20").unwrap(), (10, 20));
+        assert!(parse_screen_point("-1,20").is_err());
+        assert!(parse_screen_point("10001,20").is_err());
+        assert!(parse_screen_point("not-a-point").is_err());
+        assert!(validate_typing_target("tekst jawny").is_ok());
+        assert!(validate_typing_target(&"x".repeat(2001)).is_err());
+        assert!(validate_typing_target("z\0sekretem").is_err());
     }
 
     #[cfg(target_os = "macos")]

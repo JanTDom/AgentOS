@@ -57,6 +57,6 @@ Unsigned local builds may require allowing the app in macOS Privacy & Security. 
 
 ## Security boundary
 
-The MVP does not give an agent unrestricted mouse/keyboard control. Computer actions are explicit, allowlisted and approval-gated. The network backend blocks localhost and common private ranges and caps responses. Full Accessibility automation belongs in a separate permission and audit layer with an emergency stop.
+AgentOS does not give an agent unrestricted mouse/keyboard control. Computer actions are explicit, allowlisted and approval-gated: opening/revealing project locations, activating a named application, bounded coordinate clicks, limited text entry and screenshots. Accessibility actions require the macOS permission and are kept separate from arbitrary script execution. The network backend blocks localhost and common private ranges and caps responses.
 
 See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the current boundary and open risks.
