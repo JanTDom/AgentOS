@@ -68,6 +68,9 @@ export type MemoryItem = {
   confidence: "high" | "medium" | "low";
   tags: string[];
   enabled: boolean;
+  status?: "active" | "expired" | "conflict" | "disabled";
+  verifiedAt?: string;
+  supersedes?: string;
   updatedAt: string;
 };
 
@@ -132,6 +135,8 @@ export type Run = {
   model?: string;
   routingReason?: string;
   estimatedCost?: number;
+  worktreePath?: string;
+  checkpointPath?: string;
 };
 
 export type AppSnapshot = {

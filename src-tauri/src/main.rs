@@ -65,6 +65,62 @@ struct ContextFileRecord {
     content: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CheckpointRecord {
+    run_id: String,
+    project_path: String,
+    created_at: String,
+    git_head: Option<String>,
+    worktree_path: Option<String>,
+}
+
+fn safe_id(value: &str) -> bool {
+    !value.is_empty() && value.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+}
+
+fn checkpoint_dir(root: &Path) -> PathBuf { root.join(".agentos").join("checkpoints") }
+
+#[tauri::command]
+fn create_checkpoint(project_path: String, run_id: String, worktree_path: Option<String>) -> Result<CheckpointRecord, String> {
+    let root = PathBuf::from(&project_path);
+    if !root.is_dir() || !safe_id(&run_id) { return Err("Nieprawidłowy katalog projektu lub identyfikator zadania".into()); }
+    let dir = checkpoint_dir(&root);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Nie udało się utworzyć checkpointu: {e}"))?;
+    let git_head = Command::new("git").args(["-C", &project_path, "rev-parse", "HEAD"]).output().ok().filter(|o| o.status.success()).and_then(|o| String::from_utf8(o.stdout).ok()).map(|s| s.trim().to_string());
+    let record = CheckpointRecord { run_id: run_id.clone(), project_path: project_path.clone(), created_at: format!("{:?}", SystemTime::now()), git_head, worktree_path };
+    let path = dir.join(format!("{run_id}.json"));
+    std::fs::write(path, serde_json::to_vec_pretty(&record).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    Ok(record)
+}
+
+#[tauri::command]
+fn list_checkpoints(project_path: String) -> Result<Vec<CheckpointRecord>, String> {
+    let root = PathBuf::from(&project_path);
+    let dir = checkpoint_dir(&root);
+    if !dir.is_dir() { return Ok(Vec::new()); }
+    let mut records = Vec::new();
+    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if path.extension().and_then(|v| v.to_str()) != Some("json") { continue; }
+        if let Ok(bytes) = std::fs::read(path) { if let Ok(record) = serde_json::from_slice(&bytes) { records.push(record); } }
+    }
+    Ok(records)
+}
+
+#[tauri::command]
+fn prepare_worktree(project_path: String, run_id: String) -> Result<String, String> {
+    let root = PathBuf::from(&project_path);
+    if !root.join(".git").is_dir() || !safe_id(&run_id) { return Err("Izolacja wymaga repozytorium Git i bezpiecznego identyfikatora".into()); }
+    let parent = root.join(".agentos").join("worktrees");
+    std::fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
+    let target = parent.join(&run_id);
+    if target.exists() { return Ok(target.display().to_string()); }
+    let output = Command::new("git").args(["-C", &project_path, "worktree", "add", "--detach", target.to_string_lossy().as_ref(), "HEAD"]).output().map_err(|e| e.to_string())?;
+    if !output.status.success() { return Err(String::from_utf8_lossy(&output.stderr).trim().to_string()); }
+    Ok(target.display().to_string())
+}
+
 fn validate_http_url(raw: &str) -> Result<Url, String> {
     let parsed = Url::parse(raw).map_err(|_| "Nieprawidłowy adres URL".to_string())?;
     if parsed.scheme() != "http" && parsed.scheme() != "https" {
@@ -451,6 +507,9 @@ pub fn run() {
             discover_model_offers,
             inspect_project,
             read_project_context,
+            create_checkpoint,
+            list_checkpoints,
+            prepare_worktree,
             save_provider,
             get_provider_key_statuses,
             run_model,

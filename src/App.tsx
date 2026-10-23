@@ -366,6 +366,13 @@ function App() {
   const addMemory = (scope: "global" | "project") => {
     const content = window.prompt(scope === "global" ? "Wpisz wiedzę wspólną dla wszystkich projektów:" : "Wpisz pamięć tego projektu:");
     if (!content?.trim()) return;
+    const normalized = content.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+    const currentKnowledge = projectKnowledge(snapshot, activeProject.id);
+    const existing = [...snapshot.globalMemory, ...currentKnowledge.memory].find((item) => item.content.toLocaleLowerCase().replace(/\s+/g, " ") === normalized);
+    if (existing) {
+      notify({ tone: "warn", text: `Ta wiedza już istnieje (${existing.scope === "global" ? "globalnie" : "w projekcie"}). Nie utworzono duplikatu.` });
+      return;
+    }
     const item: MemoryItem = {
       id: `memory-${Date.now()}`,
       title: content.trim().slice(0, 64),
@@ -380,8 +387,7 @@ function App() {
     if (scope === "global") {
       updateSnapshot({ ...snapshot, globalMemory: [item, ...snapshot.globalMemory] });
     } else {
-      const current = projectKnowledge(snapshot, activeProject.id);
-      updateActiveKnowledge({ ...current, memory: [item, ...current.memory] });
+      updateActiveKnowledge({ ...currentKnowledge, memory: [item, ...currentKnowledge.memory] });
     }
     notify({ tone: "good", text: "Pamięć została zapisana lokalnie z oznaczeniem źródła." });
   };

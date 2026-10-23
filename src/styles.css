@@ -270,3 +270,5 @@ kbd { color: #a4b5c8; border: 1px solid rgba(148, 170, 202, .24); border-bottom-
 .background-run-main small { margin-top: 4px; color: var(--subtle); font-size: 9px; }
 .background-run-progress { display: grid; gap: 5px; }
 .background-run-progress small { color: var(--subtle); font-size: 9px; text-align: right; }
+.import-context-button { position: relative; overflow: hidden; cursor: pointer; }
+.import-context-button input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
