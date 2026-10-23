@@ -215,7 +215,7 @@ function buildTaskPrompt(prompt: string, knowledge: ProjectKnowledge, globalMemo
     `Projekt: ${projectPath || "brak aktywnego katalogu"}`,
     `Tryb: ${mode}`,
     knowledge.instructions ? `Instrukcje projektu:\n${knowledge.instructions}` : "",
-    enabledMemory.length ? `Pamięć z pochodzeniem:\n${enabledMemory.map((item) => `- ${item.title} [${item.source}]: ${item.content}`).join("\n")}` : "",
+    enabledMemory.length ? `Pamięć z pochodzeniem:\n${enabledMemory.map((item) => `- ${item.title} [${item.source}${item.status === "conflict" ? "; KONFLIKT — nie rozstrzygaj samodzielnie" : ""}]: ${item.content}`).join("\n")}` : "",
     knowledge.sources.length ? `Źródła dostępne w projekcie:\n${knowledge.sources.map((source) => `- ${source.name}: ${source.path}`).join("\n")}` : "",
     enabledAgents.length ? `Role agentów do uwzględnienia:\n${enabledAgents.map((agent) => `- ${agent.name} (${agent.role}): ${agent.instructions}`).join("\n")}` : "",
     trustedSkills.length ? `Zaufane skille projektu (opisowe, bez automatycznego wykonywania):\n${trustedSkills.map((skill) => `- ${skill.name} ${skill.version}: ${skill.description}`).join("\n")}` : "",
@@ -375,28 +375,33 @@ function App() {
     if (!content?.trim()) return;
     const normalized = content.trim().toLocaleLowerCase().replace(/\s+/g, " ");
     const currentKnowledge = projectKnowledge(snapshot, activeProject.id);
-    const existing = [...snapshot.globalMemory, ...currentKnowledge.memory].find((item) => item.content.toLocaleLowerCase().replace(/\s+/g, " ") === normalized);
+    const allMemory = [...snapshot.globalMemory, ...currentKnowledge.memory];
+    const existing = allMemory.find((item) => item.content.toLocaleLowerCase().replace(/\s+/g, " ") === normalized);
     if (existing) {
       notify({ tone: "warn", text: `Ta wiedza już istnieje (${existing.scope === "global" ? "globalnie" : "w projekcie"}). Nie utworzono duplikatu.` });
       return;
     }
+    const title = content.trim().slice(0, 64);
+    const conflicts = allMemory.filter((memory) => memory.title.toLocaleLowerCase() === title.toLocaleLowerCase() && memory.content.toLocaleLowerCase().replace(/\s+/g, " ") !== normalized);
     const item: MemoryItem = {
       id: `memory-${Date.now()}`,
-      title: content.trim().slice(0, 64),
+      title,
       content: content.trim(),
       source: "wpis użytkownika",
       scope,
       confidence: "high",
       tags: [],
       enabled: true,
+      status: conflicts.length ? "conflict" : "active",
+      verifiedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     if (scope === "global") {
-      updateSnapshot({ ...snapshot, globalMemory: [item, ...snapshot.globalMemory] });
+      updateSnapshot({ ...snapshot, globalMemory: [item, ...snapshot.globalMemory.map((memory) => conflicts.some((conflict) => conflict.id === memory.id) ? { ...memory, status: "conflict" as const } : memory)] });
     } else {
-      updateActiveKnowledge({ ...currentKnowledge, memory: [item, ...currentKnowledge.memory] });
+      updateActiveKnowledge({ ...currentKnowledge, memory: [item, ...currentKnowledge.memory.map((memory) => conflicts.some((conflict) => conflict.id === memory.id) ? { ...memory, status: "conflict" as const } : memory)] });
     }
-    notify({ tone: "good", text: "Pamięć została zapisana lokalnie z oznaczeniem źródła." });
+    notify({ tone: conflicts.length ? "warn" : "good", text: conflicts.length ? "Zapisano wpis jako konflikt — AgentOS nie wybierze sam jednej wersji." : "Pamięć została zapisana lokalnie z oznaczeniem źródła." });
   };
 
   const addAgent = () => {
