@@ -618,7 +618,7 @@ function App() {
       setSnapshot((current) => ({
         ...current,
         runs: current.runs.map((run) =>
-          run.id === newRun.id
+          run.id === newRun.id && run.status === "running"
             ? {
                 ...run,
                 status: "done",
@@ -641,7 +641,7 @@ function App() {
       }));
       setSnapshot((current) => ({
         ...current,
-        usageLedger: [{
+        usageLedger: current.runs.some((run) => run.id === newRun.id && run.status === "done") ? [{
           id: `usage-${Date.now()}`,
           runId: newRun.id,
           providerId: routedProvider.id,
@@ -651,7 +651,7 @@ function App() {
           estimatedCost: route.estimatedCost,
           reason: route.reason,
           createdAt: new Date().toISOString(),
-        }, ...current.usageLedger].slice(0, 500),
+        }, ...current.usageLedger].slice(0, 500) : current.usageLedger,
       }));
       notify({ tone: "good", text: `Odpowiedź otrzymana z ${routedProvider.name}. ${route.reason}.` });
     } catch (error) {
@@ -673,7 +673,7 @@ function App() {
           });
           setSnapshot((current) => ({
             ...current,
-            runs: current.runs.map((run) => run.id === newRun.id ? {
+            runs: current.runs.map((run) => run.id === newRun.id && run.status === "running" ? {
               ...run,
               status: "done",
               progress: 100,
@@ -693,7 +693,7 @@ function App() {
       }
       setSnapshot((current) => ({
         ...current,
-        runs: current.runs.map((run) => run.id === newRun.id
+        runs: current.runs.map((run) => run.id === newRun.id && run.status === "running"
           ? {
               ...run,
               status: "failed",
@@ -739,7 +739,7 @@ function App() {
       });
       setSnapshot((current) => ({
         ...current,
-        runs: current.runs.map((run) => run.id === activeRun.id
+        runs: current.runs.map((run) => run.id === activeRun.id && run.status === "running"
           ? {
               ...run,
               status: "done",
@@ -760,7 +760,7 @@ function App() {
       const message = error instanceof Error ? error.message : String(error);
       setSnapshot((current) => ({
         ...current,
-        runs: current.runs.map((run) => run.id === activeRun.id
+        runs: current.runs.map((run) => run.id === activeRun.id && run.status === "running"
           ? { ...run, status: "failed", progress: 55, messages: nextMessages }
           : run),
       }));
