@@ -127,6 +127,7 @@ export type RoutingPolicy = {
   preferLocal: boolean;
   maxCostPerTask: number;
   dailyBudget: number;
+  maxParallelTasks: number;
 };
 
 export type UsageLedgerEntry = {
@@ -380,6 +381,7 @@ export const defaultSnapshot: AppSnapshot = {
     preferLocal: true,
     maxCostPerTask: 0.25,
     dailyBudget: 5,
+    maxParallelTasks: 4,
   },
   usageLedger: [],
 };

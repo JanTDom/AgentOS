@@ -538,6 +538,12 @@ function App() {
       setView("models");
       return;
     }
+    const activeTaskCount = snapshot.runs.filter((run) => run.status === "running").length;
+    if (activeTaskCount >= Math.max(1, snapshot.routing.maxParallelTasks ?? 4)) {
+      notify({ tone: "warn", text: `Osiągnięto limit równoległych zadań (${snapshot.routing.maxParallelTasks ?? 4}). Poczekaj na zakończenie jednej sesji.` });
+      setView("activity");
+      return;
+    }
     const title = task.trim() || (
       taskScope === "chat"
         ? "Odpowiedz na pytanie użytkownika"
