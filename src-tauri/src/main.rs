@@ -66,6 +66,18 @@ struct ContextFileRecord {
     content: String,
 }
 
+#[tauri::command]
+fn write_project_context(path: String, content: String) -> Result<String, String> {
+    let root = PathBuf::from(&path);
+    if !root.is_dir() { return Err("Katalog projektu nie istnieje".into()); }
+    if content.len() > 30_000 { return Err("Instrukcje projektu przekraczają limit 30 000 znaków".into()); }
+    let target = root.join("PROJECT_CONTEXT.md");
+    let temp = root.join(".agentos-project-context.tmp");
+    std::fs::write(&temp, content.as_bytes()).map_err(|e| e.to_string())?;
+    std::fs::rename(&temp, &target).map_err(|e| e.to_string())?;
+    Ok(target.display().to_string())
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct CheckpointRecord {
@@ -674,6 +686,7 @@ pub fn run() {
             discover_model_offers,
             inspect_project,
             read_project_context,
+            write_project_context,
             create_checkpoint,
             list_checkpoints,
             recover_checkpoint,

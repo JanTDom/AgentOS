@@ -290,3 +290,4 @@ kbd { color: #a4b5c8; border: 1px solid rgba(148, 170, 202, .24); border-bottom-
 .skill-item strong small, .skill-item span, .skill-item > div:first-child small { color: var(--muted); font-size: 10px; }
 .skill-item span, .skill-item > div:first-child small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skill-item-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.portable-context-panel { margin-top: 14px; }
