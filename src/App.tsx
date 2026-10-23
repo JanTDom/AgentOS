@@ -13,6 +13,7 @@ import {
   Code2,
   Command,
   Cpu,
+  Download,
   Folder,
   FolderOpen,
   Globe2,
@@ -397,6 +398,29 @@ function App() {
     };
     updateActiveKnowledge({ ...current, agents: [...current.agents, agent] });
     notify({ tone: "good", text: "Dodano agenta do projektu. Jego instrukcje możesz teraz doprecyzować." });
+  };
+
+  const exportProjectContext = () => {
+    const payload = { format: "agentos-project-context", version: 1, exportedAt: new Date().toISOString(), project: activeProject, knowledge: activeKnowledge, globalMemory: snapshot.globalMemory, routing: snapshot.routing };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${activeProject.name.replace(/[^a-z0-9ąćęłńóśźż_-]+/gi, "-")}-agentos-context.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    notify({ tone: "good", text: "Wyeksportowano przenośny kontekst projektu." });
+  };
+
+  const importProjectContext = async (file: File) => {
+    try {
+      const payload = JSON.parse(await file.text()) as { knowledge?: ProjectKnowledge; globalMemory?: MemoryItem[] };
+      if (!payload.knowledge) throw new Error("Brak sekcji knowledge");
+      setSnapshot((current) => ({ ...current, knowledge: { ...current.knowledge, [activeProject.id]: { ...emptyKnowledge, ...payload.knowledge } }, globalMemory: payload.globalMemory ?? current.globalMemory }));
+      notify({ tone: "good", text: "Zaimportowano kontekst projektu bez nadpisywania plików." });
+    } catch (error) {
+      notify({ tone: "bad", text: `Nie udało się zaimportować kontekstu: ${error instanceof Error ? error.message : String(error)}` });
+    }
   };
 
   const notify = (next: Notice) => {
@@ -887,7 +911,7 @@ function App() {
             onRoutingChange={(routing) => setSnapshot((current) => ({ ...current, routing }))}
           />
         )}
-        {view === "workspace" && <WorkspaceView project={activeProject} knowledge={activeKnowledge} globalMemory={snapshot.globalMemory} providers={snapshot.providers} onKnowledgeChange={updateActiveKnowledge} onAddSource={() => void addProjectSource()} onAddMemory={addMemory} onAddAgent={addAgent} />}
+        {view === "workspace" && <WorkspaceView project={activeProject} knowledge={activeKnowledge} globalMemory={snapshot.globalMemory} providers={snapshot.providers} onKnowledgeChange={updateActiveKnowledge} onAddSource={() => void addProjectSource()} onAddMemory={addMemory} onAddAgent={addAgent} onExport={exportProjectContext} onImport={(file) => void importProjectContext(file)} />}
         {view === "computer" && <ComputerView activeProject={activeProject} runAction={runComputerAction} busy={isBusy} enabled={permissions.computer} onToggle={() => updatePermission("computer")} />}
         {view === "settings" && (
           <SettingsView
@@ -1011,7 +1035,7 @@ function ProjectsView({ projects, activeProjectId, onProject, onNew, onRename, o
   </article>)}{projects.length === 0 && <div className="empty-projects"><FolderOpen size={24} /><strong>Nie ma tu jeszcze żadnego projektu</strong><span>Dodaj własny katalog — przykładowe projekty można bezpiecznie usuwać.</span><button className="primary-button" onClick={onNew}><Plus size={14} /> Dodaj katalog</button></div>}<button className="project-card add-card" onClick={onNew}><Plus size={20} /><strong>Dodaj nowy projekt</strong><span>Wybierz katalog na Macu</span></button></div></div>;
 }
 
-function WorkspaceView({ project, knowledge, globalMemory, providers, onKnowledgeChange, onAddSource, onAddMemory, onAddAgent }: { project: Project; knowledge: ProjectKnowledge; globalMemory: MemoryItem[]; providers: Provider[]; onKnowledgeChange: (knowledge: ProjectKnowledge) => void; onAddSource: () => void; onAddMemory: (scope: "global" | "project") => void; onAddAgent: () => void }) {
+function WorkspaceView({ project, knowledge, globalMemory, providers, onKnowledgeChange, onAddSource, onAddMemory, onAddAgent, onExport, onImport }: { project: Project; knowledge: ProjectKnowledge; globalMemory: MemoryItem[]; providers: Provider[]; onKnowledgeChange: (knowledge: ProjectKnowledge) => void; onAddSource: () => void; onAddMemory: (scope: "global" | "project") => void; onAddAgent: () => void; onExport: () => void; onImport: (file: File) => void }) {
   const [tab, setTab] = useState<"instructions" | "memory" | "sources" | "agents">("instructions");
   const [sourceUrl, setSourceUrl] = useState("");
   const updateAgent = (agentId: string, patch: Partial<AgentDefinition>) => onKnowledgeChange({ ...knowledge, agents: knowledge.agents.map((agent) => agent.id === agentId ? { ...agent, ...patch } : agent) });
