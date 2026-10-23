@@ -209,7 +209,7 @@ function chooseProvider(
 
 function buildTaskPrompt(prompt: string, knowledge: ProjectKnowledge, globalMemory: MemoryItem[], projectPath: string, mode: TaskScope): string {
   const enabledMemory = [...globalMemory, ...knowledge.memory].filter((item) => item.enabled).slice(0, 40);
-  const enabledAgents = knowledge.agents.filter((agent) => agent.enabled);
+  const enabledAgents = orderAgents(knowledge.agents.filter((agent) => agent.enabled));
   const trustedSkills = (knowledge.skills ?? []).filter((skill) => skill.enabled && skill.trusted);
   const context = [
     `Projekt: ${projectPath || "brak aktywnego katalogu"}`,
@@ -221,6 +221,27 @@ function buildTaskPrompt(prompt: string, knowledge: ProjectKnowledge, globalMemo
     trustedSkills.length ? `Zaufane skille projektu (opisowe, bez automatycznego wykonywania):\n${trustedSkills.map((skill) => `- ${skill.name} ${skill.version}: ${skill.description}`).join("\n")}` : "",
   ].filter(Boolean).join("\n\n");
   return `${context}\n\nZadanie użytkownika:\n${prompt}`;
+}
+
+function orderAgents(agents: AgentDefinition[]): AgentDefinition[] {
+  const byId = new Map(agents.map((agent) => [agent.id, agent]));
+  const ordered: AgentDefinition[] = [];
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (agent: AgentDefinition) => {
+    if (visited.has(agent.id)) return;
+    if (visiting.has(agent.id)) throw new Error(`Cykl w grafie agentów przy ${agent.name}`);
+    visiting.add(agent.id);
+    for (const dependency of agent.dependsOn ?? []) {
+      const parent = byId.get(dependency);
+      if (parent) visit(parent);
+    }
+    visiting.delete(agent.id);
+    visited.add(agent.id);
+    ordered.push(agent);
+  };
+  for (const agent of agents) visit(agent);
+  return ordered;
 }
 
 const emptyProject: Project = {
@@ -413,6 +434,7 @@ function App() {
       instructions: "Opisz tutaj zakres odpowiedzialności tego agenta.",
       modelId: selectedProviderId,
       enabled: true,
+      dependsOn: [],
     };
     updateActiveKnowledge({ ...current, agents: [...current.agents, agent] });
     notify({ tone: "good", text: "Dodano agenta do projektu. Jego instrukcje możesz teraz doprecyzować." });

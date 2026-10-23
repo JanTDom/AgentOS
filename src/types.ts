@@ -90,6 +90,7 @@ export type AgentDefinition = {
   instructions: string;
   modelId: string;
   enabled: boolean;
+  dependsOn?: string[];
 };
 
 export type EvidenceArtifact = {
