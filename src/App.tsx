@@ -306,7 +306,7 @@ function App() {
   });
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
-  const queuedTaskRef = useRef<{ title: string; scope: TaskScope } | null>(null);
+  const queuedTaskRef = useRef<Array<{ title: string; scope: TaskScope }>>([]);
   const [autoLaunchQueuedTask, setAutoLaunchQueuedTask] = useState(false);
 
   useEffect(() => {
@@ -551,7 +551,7 @@ function App() {
     );
     const activeTaskCount = snapshot.runs.filter((run) => run.status === "running").length;
     if (activeTaskCount >= Math.max(1, snapshot.routing.maxParallelTasks ?? 4)) {
-      queuedTaskRef.current = { title, scope: taskScope };
+      queuedTaskRef.current.push({ title, scope: taskScope });
       setTask("");
       notify({ tone: "warn", text: `Zadanie dodano do kolejki. Uruchomi się po zwolnieniu miejsca (${snapshot.routing.maxParallelTasks ?? 4} równoległe sesje).` });
       setView("activity");
@@ -718,10 +718,10 @@ function App() {
   };
 
   useEffect(() => {
-    const queued = queuedTaskRef.current;
+    const queued = queuedTaskRef.current[0];
     const activeTaskCount = snapshot.runs.filter((run) => run.status === "running").length;
     if (!queued || activeTaskCount >= Math.max(1, snapshot.routing.maxParallelTasks ?? 4)) return;
-    queuedTaskRef.current = null;
+    queuedTaskRef.current.shift();
     setTaskScope(queued.scope);
     setTask(queued.title);
     setAutoLaunchQueuedTask(true);
