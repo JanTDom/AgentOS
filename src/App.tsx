@@ -949,7 +949,7 @@ function App() {
       return;
     }
     const recovered = await tryInvoke<{ runId: string; projectPath: string; worktreePath?: string }>("recover_checkpoint", { projectPath: activeProject.path, runId: run.id });
-    notify(recovered ? { tone: "good", text: recovered.worktreePath ? `Checkpoint jest gotowy w izolowanym worktree: ${recovered.worktreePath}` : "Checkpoint jest poprawny i gotowy do odzyskania." } : { tone: "bad", text: "Nie udało się zweryfikować checkpointu. Pliki nie zostały zmienione." });
+    notify(recovered ? { tone: "good", text: recovered.worktreePath ? `Checkpoint jest gotowy w izolowanym worktree: ${recovered.worktreePath}` : "Checkpoint jest poprawny i gotowy do wznowienia." } : { tone: "bad", text: "Nie udało się odtworzyć checkpointu. Pliki projektu nie zostały zmienione." });
   };
 
   const stopRun = (runId: string) => {
@@ -1146,7 +1146,7 @@ function TimelineCard({ item, index }: { item: TimelineItem; index: number }) {
 }
 
 function RecoveryBanner({ run, onRecover, onExportEvidence }: { run: Run; onRecover: () => void; onExportEvidence?: () => void }) {
-  return <section className="recovery-banner"><div><span className="eyebrow"><ShieldCheck size={13} /> odzyskiwanie sesji</span><strong>Checkpoint zapisany</strong><small>{run.worktreePath ? `Izolowany worktree: ${run.worktreePath}` : "Możesz sprawdzić integralność checkpointu przed wznowieniem."}</small></div><div className="page-header-actions"><button className="secondary-button" onClick={onRecover}><ShieldCheck size={14} /> Sprawdź checkpoint</button>{onExportEvidence && <button className="secondary-button" onClick={onExportEvidence}><Download size={14} /> Eksportuj dowody</button>}</div></section>;
+  return <section className="recovery-banner"><div><span className="eyebrow"><ShieldCheck size={13} /> odzyskiwanie sesji</span><strong>Checkpoint zapisany</strong><small>{run.worktreePath ? `Izolowany worktree: ${run.worktreePath}` : "AgentOS może odtworzyć izolowane środowisko z zapisanego commita."}</small></div><div className="page-header-actions"><button className="secondary-button" onClick={onRecover}><ShieldCheck size={14} /> Odtwórz checkpoint</button>{onExportEvidence && <button className="secondary-button" onClick={onExportEvidence}><Download size={14} /> Eksportuj dowody</button>}</div></section>;
 }
 
 function LegacyEvidenceRail({ run, setView, permissions, onToggle }: { run: Run; setView: (view: View) => void; permissions: PermissionState; onToggle: (key: keyof PermissionState) => void }) {
