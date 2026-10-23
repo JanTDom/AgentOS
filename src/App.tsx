@@ -430,6 +430,17 @@ function App() {
     notify({ tone: "good", text: "Wyeksportowano przenośny kontekst projektu." });
   };
 
+  const exportRunEvidence = (run: Run) => {
+    const payload = { format: "agentos-run-evidence", version: 1, exportedAt: new Date().toISOString(), run, project: activeProject, knowledge: activeKnowledge, globalMemory: snapshot.globalMemory, routing: snapshot.routing, usage: snapshot.usageLedger.filter((entry) => entry.runId === run.id) };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${run.id}-agentos-evidence.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    notify({ tone: "good", text: "Wyeksportowano pakiet dowodowy sesji." });
+  };
+
   const importProjectContext = async (file: File) => {
     try {
       const payload = JSON.parse(await file.text()) as { knowledge?: ProjectKnowledge; globalMemory?: MemoryItem[] };
@@ -902,7 +913,7 @@ function App() {
         </header>
 
         {notice && <div className={`notice notice-${notice.tone}`}><span>{notice.text}</span><button onClick={() => setNotice(null)}><X size={14} /></button></div>}
-        {view === "run" && activeRun.checkpointPath && <RecoveryBanner run={activeRun} onRecover={() => void recoverRun(activeRun)} />}
+        {view === "run" && activeRun.checkpointPath && <RecoveryBanner run={activeRun} onRecover={() => void recoverRun(activeRun)} onExportEvidence={() => exportRunEvidence(activeRun)} />}
 
         {view === "overview" && (
           <Overview
@@ -933,6 +944,7 @@ function App() {
             selectedProviderId={selectedProviderId}
             onProviderChange={setSelectedProviderId}
             onRecover={() => void recoverRun(activeRun)}
+            onExportEvidence={() => exportRunEvidence(activeRun)}
           />
         )}
         {view === "projects" && (
@@ -1041,7 +1053,7 @@ function ActivityView({ runs, projects, onSelect }: { runs: Run[]; projects: Pro
   return <div className="content page-content activity-content"><div className="page-header"><div><span className="eyebrow"><Activity size={13} /> praca równoległa</span><h1>Zadania w tle</h1><p>Każda sesja działa niezależnie. Możesz przełączać projekty i otwierać inne zadania bez zatrzymywania pracy w tle.</p></div><div className="permission-state"><Activity size={14} /> {active.length} aktywnych</div></div><div className="activity-summary"><div><strong>{active.length}</strong><span>aktywnych lub oczekujących</span></div><div><strong>{runs.filter((run) => run.status === "done").length}</strong><span>ukończonych sesji</span></div><div><strong>{runs.filter((run) => run.status === "failed").length}</strong><span>z błędem</span></div></div><section className="background-run-list">{runs.map((run) => { const project = projects.find((item) => item.id === run.projectId); return <button className="background-run" key={run.id} onClick={() => onSelect(run)}><div className={`background-run-icon ${run.status}`}><Activity size={16} /></div><div className="background-run-main"><strong>{run.title}</strong><span>{project?.name ?? "Bez projektu"} · {run.model ?? "router automatyczny"}</span><small>{run.routingReason ?? "sesja lokalna"}</small></div><div className="background-run-progress"><span className={`status-text ${run.status}`}>{statusLabel(run.status)}</span><div className="progress-track"><div className={`progress-fill ${run.status}`} style={{ width: `${run.progress}%` }} /></div><small>{run.progress}% · {run.estimatedCost ? `$${run.estimatedCost.toFixed(4)}` : "lokalnie"}</small></div><ArrowUpRight size={15} className="muted" /></button> })}{runs.length === 0 && <EmptyInline icon={<Activity size={20} />} title="Nie ma jeszcze zadań" description="Uruchom intencję z Centrum pracy, a sesja pojawi się tutaj." />}</section></div>;
 }
 
-function RunView({ run, project, onStart, onView, onComputer, followUpTask, setFollowUpTask, onFollowUp, providers, selectedProviderId, onProviderChange, onRecover }: { run: Run; project: Project; onStart: () => void; onView: (view: View) => void; onComputer: () => void; followUpTask: string; setFollowUpTask: (value: string) => void; onFollowUp: () => void; providers: Provider[]; selectedProviderId: string; onProviderChange: (value: string) => void; onRecover: () => void }) {
+function RunView({ run, project, onStart, onView, onComputer, followUpTask, setFollowUpTask, onFollowUp, providers, selectedProviderId, onProviderChange, onRecover, onExportEvidence }: { run: Run; project: Project; onStart: () => void; onView: (view: View) => void; onComputer: () => void; followUpTask: string; setFollowUpTask: (value: string) => void; onFollowUp: () => void; providers: Provider[]; selectedProviderId: string; onProviderChange: (value: string) => void; onRecover: () => void; onExportEvidence: () => void }) {
   const messages = run.messages ?? (run.response
     ? [{ role: "user" as const, content: run.title }, { role: "assistant" as const, content: run.response }]
     : []);
@@ -1055,8 +1067,8 @@ function TimelineCard({ item, index }: { item: TimelineItem; index: number }) {
   return <div className={`timeline-entry ${item.status}`}><div className={`timeline-marker marker-${item.kind}`}><Icon size={16} /></div><div className="timeline-card"><div className="timeline-top"><div><strong>{item.title}</strong>{item.description && <span>{item.description}</span>}</div><time>{item.time}</time></div>{item.details && <div className="timeline-details">{item.details.map((detail) => <div key={detail}><Check size={13} /> {detail}</div>)}</div>}</div></div>;
 }
 
-function RecoveryBanner({ run, onRecover }: { run: Run; onRecover: () => void }) {
-  return <section className="recovery-banner"><div><span className="eyebrow"><ShieldCheck size={13} /> odzyskiwanie sesji</span><strong>Checkpoint zapisany</strong><small>{run.worktreePath ? `Izolowany worktree: ${run.worktreePath}` : "Możesz sprawdzić integralność checkpointu przed wznowieniem."}</small></div><button className="secondary-button" onClick={onRecover}><ShieldCheck size={14} /> Sprawdź checkpoint</button></section>;
+function RecoveryBanner({ run, onRecover, onExportEvidence }: { run: Run; onRecover: () => void; onExportEvidence?: () => void }) {
+  return <section className="recovery-banner"><div><span className="eyebrow"><ShieldCheck size={13} /> odzyskiwanie sesji</span><strong>Checkpoint zapisany</strong><small>{run.worktreePath ? `Izolowany worktree: ${run.worktreePath}` : "Możesz sprawdzić integralność checkpointu przed wznowieniem."}</small></div><div className="page-header-actions"><button className="secondary-button" onClick={onRecover}><ShieldCheck size={14} /> Sprawdź checkpoint</button>{onExportEvidence && <button className="secondary-button" onClick={onExportEvidence}><Download size={14} /> Eksportuj dowody</button>}</div></section>;
 }
 
 function LegacyEvidenceRail({ run, setView, permissions, onToggle }: { run: Run; setView: (view: View) => void; permissions: PermissionState; onToggle: (key: keyof PermissionState) => void }) {
