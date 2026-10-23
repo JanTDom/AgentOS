@@ -1182,6 +1182,7 @@ function ModelsView({ providers, selectedProviderId, setSelectedProviderId, show
 
   return (
     <div className="content page-content">
+      <section className="parallel-policy"><div><strong>Równoległe sesje</strong><span>Limit chroni komputer i budżet, a aktywne zadania pozostają niezależne.</span></div><label>Maksymalnie równolegle<input type="number" min="1" max="32" value={routing.maxParallelTasks} onChange={(event) => onRoutingChange({ ...routing, maxParallelTasks: Math.max(1, Math.min(32, Number(event.target.value) || 1)) })} /></label></section>
       <div className="page-header">
         <div><span className="eyebrow"><Cpu size={13} /> inteligentny routing</span><h1>Modele i routing</h1><p>Podłącz dostawców, a AgentOS dobierze model do trudności, prywatności, kosztu i czasu.</p></div>
         <div className="page-header-actions"><button className="secondary-button" onClick={() => void discoverOffers()} disabled={discovering}><Network size={14} /> {discovering ? "Szukam ofert..." : "Znajdź tanie modele"}</button><button className="primary-button" onClick={() => setShowForm(!showForm)}><Plus size={15} /> Podłącz model</button></div>

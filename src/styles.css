@@ -276,3 +276,9 @@ kbd { color: #a4b5c8; border: 1px solid rgba(148, 170, 202, .24); border-bottom-
 .recovery-banner > div { display: grid; gap: 4px; min-width: 0; }
 .recovery-banner strong { color: var(--text); font-size: 12px; }
 .recovery-banner small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.parallel-policy { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; padding: 13px 15px; border: 1px solid var(--border); border-radius: 10px; background: rgba(18, 28, 41, .6); }
+.parallel-policy > div { display: grid; gap: 4px; }
+.parallel-policy strong { color: var(--text); font-size: 12px; }
+.parallel-policy span { color: var(--muted); font-size: 10px; }
+.parallel-policy label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; }
+.parallel-policy input { width: 110px; }
