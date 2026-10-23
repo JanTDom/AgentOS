@@ -252,3 +252,21 @@ kbd { color: #a4b5c8; border: 1px solid rgba(148, 170, 202, .24); border-bottom-
 .empty-inline > div { color: var(--cyan); }
 .empty-inline strong { color: var(--text); font-size: 12px; }
 .empty-inline span { max-width: 430px; font-size: 10px; line-height: 1.5; }
+.activity-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+.activity-summary > div { display: grid; gap: 5px; padding: 14px; border: 1px solid var(--border); border-radius: 9px; background: rgba(18, 28, 41, .6); }
+.activity-summary strong { font-size: 24px; letter-spacing: -.04em; }
+.activity-summary span { color: var(--muted); font-size: 10px; }
+.background-run-list { display: grid; gap: 9px; }
+.background-run { display: grid; grid-template-columns: 34px minmax(0, 1fr) 180px 16px; align-items: center; gap: 11px; width: 100%; padding: 13px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); background: rgba(18, 28, 41, .6); text-align: left; cursor: pointer; }
+.background-run:hover { border-color: rgba(75, 216, 255, .35); background: rgba(23, 43, 59, .68); }
+.background-run-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: var(--muted); background: rgba(130, 159, 194, .1); }
+.background-run-icon.running { color: var(--cyan); background: rgba(75, 216, 255, .12); }
+.background-run-icon.done { color: var(--green); background: rgba(87, 228, 154, .12); }
+.background-run-icon.failed { color: var(--red); background: rgba(255, 116, 116, .12); }
+.background-run-main { min-width: 0; }
+.background-run-main strong, .background-run-main span, .background-run-main small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.background-run-main strong { font-size: 12px; }
+.background-run-main span { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.background-run-main small { margin-top: 4px; color: var(--subtle); font-size: 9px; }
+.background-run-progress { display: grid; gap: 5px; }
+.background-run-progress small { color: var(--subtle); font-size: 9px; text-align: right; }

@@ -848,6 +848,7 @@ function App() {
             setView={setView}
           />
         )}
+        {view === "activity" && <ActivityView runs={snapshot.runs} projects={snapshot.projects} onSelect={selectRun} />}
         {view === "run" && (
           <RunView
             run={activeRun}
@@ -912,6 +913,7 @@ function Sidebar({ view, projects, activeProjectId, onView, onProject, onNewProj
   const [draft, setDraft] = useState(profile);
   const nav: { id: View; label: string; icon: typeof LayoutDashboard }[] = [
     { id: "overview", label: "Centrum pracy", icon: LayoutDashboard },
+    { id: "activity", label: "Zadania w tle", icon: Activity },
     { id: "projects", label: "Projekty", icon: FolderOpen },
     { id: "models", label: "Modele i routing", icon: Cpu },
     { id: "workspace", label: "Wiedza i agenci", icon: Brain },
@@ -961,6 +963,11 @@ function Overview({ snapshot, activeProject, activeRun, task, setTask, taskScope
       <section className="bottom-stat-grid"><MiniStat icon={<Timer size={16} />} label="Zaoszczędzony czas" value="4h 26m" detail="w tym tygodniu" tone="cyan" /><MiniStat icon={<Network size={16} />} label="Modele aktywne" value={`${snapshot.providers.length}`} detail="4 dostawców" tone="violet" /><MiniStat icon={<ShieldCheck size={16} />} label="Zadania z dowodem" value="92%" detail="ostatnie 30 dni" tone="green" /></section>
     </div>
   );
+}
+
+function ActivityView({ runs, projects, onSelect }: { runs: Run[]; projects: Project[]; onSelect: (run: Run) => void }) {
+  const active = runs.filter((run) => run.status === "running" || run.status === "waiting");
+  return <div className="content page-content activity-content"><div className="page-header"><div><span className="eyebrow"><Activity size={13} /> praca równoległa</span><h1>Zadania w tle</h1><p>Każda sesja działa niezależnie. Możesz przełączać projekty i otwierać inne zadania bez zatrzymywania pracy w tle.</p></div><div className="permission-state"><Activity size={14} /> {active.length} aktywnych</div></div><div className="activity-summary"><div><strong>{active.length}</strong><span>aktywnych lub oczekujących</span></div><div><strong>{runs.filter((run) => run.status === "done").length}</strong><span>ukończonych sesji</span></div><div><strong>{runs.filter((run) => run.status === "failed").length}</strong><span>z błędem</span></div></div><section className="background-run-list">{runs.map((run) => { const project = projects.find((item) => item.id === run.projectId); return <button className="background-run" key={run.id} onClick={() => onSelect(run)}><div className={`background-run-icon ${run.status}`}><Activity size={16} /></div><div className="background-run-main"><strong>{run.title}</strong><span>{project?.name ?? "Bez projektu"} · {run.model ?? "router automatyczny"}</span><small>{run.routingReason ?? "sesja lokalna"}</small></div><div className="background-run-progress"><span className={`status-text ${run.status}`}>{statusLabel(run.status)}</span><div className="progress-track"><div className={`progress-fill ${run.status}`} style={{ width: `${run.progress}%` }} /></div><small>{run.progress}% · {run.estimatedCost ? `$${run.estimatedCost.toFixed(4)}` : "lokalnie"}</small></div><ArrowUpRight size={15} className="muted" /></button> })}{runs.length === 0 && <EmptyInline icon={<Activity size={20} />} title="Nie ma jeszcze zadań" description="Uruchom intencję z Centrum pracy, a sesja pojawi się tutaj." />}</section></div>;
 }
 
 function RunView({ run, project, onStart, onView, onComputer, followUpTask, setFollowUpTask, onFollowUp, providers, selectedProviderId, onProviderChange }: { run: Run; project: Project; onStart: () => void; onView: (view: View) => void; onComputer: () => void; followUpTask: string; setFollowUpTask: (value: string) => void; onFollowUp: () => void; providers: Provider[]; selectedProviderId: string; onProviderChange: (value: string) => void }) {

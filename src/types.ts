@@ -1,4 +1,4 @@
-export type View = "overview" | "projects" | "run" | "models" | "workspace" | "computer" | "settings";
+export type View = "overview" | "activity" | "projects" | "run" | "models" | "workspace" | "computer" | "settings";
 export type TaskScope = "chat" | "project" | "analysis";
 
 export type Project = {
