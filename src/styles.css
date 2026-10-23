@@ -272,3 +272,7 @@ kbd { color: #a4b5c8; border: 1px solid rgba(148, 170, 202, .24); border-bottom-
 .background-run-progress small { color: var(--subtle); font-size: 9px; text-align: right; }
 .import-context-button { position: relative; overflow: hidden; cursor: pointer; }
 .import-context-button input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.recovery-banner { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 14px 22px 0; padding: 13px 15px; border: 1px solid rgba(87, 228, 154, .24); border-radius: 10px; background: rgba(87, 228, 154, .07); }
+.recovery-banner > div { display: grid; gap: 4px; min-width: 0; }
+.recovery-banner strong { color: var(--text); font-size: 12px; }
+.recovery-banner small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }

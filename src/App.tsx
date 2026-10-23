@@ -902,6 +902,7 @@ function App() {
         </header>
 
         {notice && <div className={`notice notice-${notice.tone}`}><span>{notice.text}</span><button onClick={() => setNotice(null)}><X size={14} /></button></div>}
+        {view === "run" && activeRun.checkpointPath && <RecoveryBanner run={activeRun} onRecover={() => void recoverRun(activeRun)} />}
 
         {view === "overview" && (
           <Overview
@@ -1052,6 +1053,10 @@ function RunView({ run, project, onStart, onView, onComputer, followUpTask, setF
 function TimelineCard({ item, index }: { item: TimelineItem; index: number }) {
   const Icon = item.kind === "plan" ? Check : item.kind === "agents" ? Network : item.kind === "tests" ? CircleCheck : item.kind === "evidence" ? Upload : CircleAlert;
   return <div className={`timeline-entry ${item.status}`}><div className={`timeline-marker marker-${item.kind}`}><Icon size={16} /></div><div className="timeline-card"><div className="timeline-top"><div><strong>{item.title}</strong>{item.description && <span>{item.description}</span>}</div><time>{item.time}</time></div>{item.details && <div className="timeline-details">{item.details.map((detail) => <div key={detail}><Check size={13} /> {detail}</div>)}</div>}</div></div>;
+}
+
+function RecoveryBanner({ run, onRecover }: { run: Run; onRecover: () => void }) {
+  return <section className="recovery-banner"><div><span className="eyebrow"><ShieldCheck size={13} /> odzyskiwanie sesji</span><strong>Checkpoint zapisany</strong><small>{run.worktreePath ? `Izolowany worktree: ${run.worktreePath}` : "Możesz sprawdzić integralność checkpointu przed wznowieniem."}</small></div><button className="secondary-button" onClick={onRecover}><ShieldCheck size={14} /> Sprawdź checkpoint</button></section>;
 }
 
 function LegacyEvidenceRail({ run, setView, permissions, onToggle }: { run: Run; setView: (view: View) => void; permissions: PermissionState; onToggle: (key: keyof PermissionState) => void }) {
