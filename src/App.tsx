@@ -68,6 +68,7 @@ import {
   UsageLedgerEntry,
   TaskScope,
   ChatMessage,
+  QueuedTask,
 } from "./types";
 
 type Notice = { tone: "good" | "warn" | "bad"; text: string } | null;
@@ -133,6 +134,7 @@ function loadLocal(): AppSnapshot {
       globalMemory: Array.isArray(candidate.globalMemory) ? candidate.globalMemory : defaultSnapshot.globalMemory,
       routing: candidate.routing ? { ...defaultSnapshot.routing, ...candidate.routing } : defaultSnapshot.routing,
       usageLedger: Array.isArray(candidate.usageLedger) ? candidate.usageLedger : defaultSnapshot.usageLedger,
+      queuedTasks: Array.isArray(candidate.queuedTasks) ? candidate.queuedTasks : defaultSnapshot.queuedTasks,
     } as AppSnapshot;
   } catch {
     return defaultSnapshot;
@@ -306,13 +308,17 @@ function App() {
   });
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
-  const queuedTaskRef = useRef<Array<{ title: string; scope: TaskScope }>>([]);
-  const [queuedTaskCount, setQueuedTaskCount] = useState(0);
+  const queuedTaskRef = useRef<QueuedTask[]>(snapshot.queuedTasks ?? []);
+  const [queuedTaskCount, setQueuedTaskCount] = useState(queuedTaskRef.current.length);
   const [autoLaunchQueuedTask, setAutoLaunchQueuedTask] = useState(false);
 
   useEffect(() => {
     void tryInvoke<AppSnapshot>("get_snapshot").then((remote) => {
-      if (remote) setSnapshot(remote);
+      if (remote) {
+        queuedTaskRef.current = remote.queuedTasks ?? [];
+        setQueuedTaskCount(queuedTaskRef.current.length);
+        setSnapshot(remote);
+      }
       setHydrated(true);
     });
   }, []);
@@ -552,8 +558,9 @@ function App() {
     );
     const activeTaskCount = snapshot.runs.filter((run) => run.status === "running").length;
     if (activeTaskCount >= Math.max(1, snapshot.routing.maxParallelTasks ?? 4)) {
-      queuedTaskRef.current.push({ title, scope: taskScope });
+      queuedTaskRef.current.push({ id: crypto.randomUUID(), title, scope: taskScope, queuedAt: new Date().toISOString() });
       setQueuedTaskCount(queuedTaskRef.current.length);
+      updateSnapshot({ ...snapshot, queuedTasks: [...queuedTaskRef.current] });
       setTask("");
       notify({ tone: "warn", text: `Zadanie dodano do kolejki. Uruchomi się po zwolnieniu miejsca (${snapshot.routing.maxParallelTasks ?? 4} równoległe sesje).` });
       setView("activity");
@@ -725,6 +732,7 @@ function App() {
     if (!queued || activeTaskCount >= Math.max(1, snapshot.routing.maxParallelTasks ?? 4)) return;
     queuedTaskRef.current.shift();
     setQueuedTaskCount(queuedTaskRef.current.length);
+    updateSnapshot({ ...snapshot, queuedTasks: [...queuedTaskRef.current] });
     setTaskScope(queued.scope);
     setTask(queued.title);
     setAutoLaunchQueuedTask(true);

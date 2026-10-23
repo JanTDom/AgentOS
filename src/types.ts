@@ -162,6 +162,13 @@ export type Run = {
   evidence?: EvidenceArtifact[];
 };
 
+export type QueuedTask = {
+  id: string;
+  title: string;
+  scope: TaskScope;
+  queuedAt: string;
+};
+
 export type AppSnapshot = {
   projects: Project[];
   providers: Provider[];
@@ -172,6 +179,7 @@ export type AppSnapshot = {
   globalMemory: MemoryItem[];
   routing: RoutingPolicy;
   usageLedger: UsageLedgerEntry[];
+  queuedTasks: QueuedTask[];
 };
 
 export type Profile = {
@@ -384,4 +392,5 @@ export const defaultSnapshot: AppSnapshot = {
     maxParallelTasks: 4,
   },
   usageLedger: [],
+  queuedTasks: [],
 };
