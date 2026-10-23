@@ -530,6 +530,15 @@ function App() {
       routingReason: route.reason,
       estimatedCost: route.estimatedCost,
     };
+    let isolatedWorktree: string | null = null;
+    if (taskScope === "project" && permissions.isolateSessions) {
+      isolatedWorktree = await tryInvoke<string>("prepare_worktree", { projectPath: activeProject.path, runId: newRun.id });
+    }
+    if (isolatedWorktree) newRun.worktreePath = isolatedWorktree;
+    const checkpoint = taskScope === "project"
+      ? await tryInvoke<{ runId: string; projectPath: string }>("create_checkpoint", { projectPath: activeProject.path, runId: newRun.id, worktreePath: isolatedWorktree })
+      : null;
+    if (checkpoint) newRun.checkpointPath = `${activeProject.path}/.agentos/checkpoints/${newRun.id}.json`;
     const next = { ...snapshot, runs: [newRun, ...snapshot.runs], activeRunId: newRun.id };
     updateSnapshot(next);
     setTask("");
@@ -801,10 +810,14 @@ function App() {
     notify({ tone: "good", text: `Router użyje teraz ${offer.name}.` });
   };
 
-  const selectProject = (project: Project) => {
-    const next = { ...snapshot, activeProjectId: project.id };
+  const selectProject = async (project: Project) => {
+    const contextFiles = await tryInvoke<Array<{ name: string; path: string; content: string }>>("read_project_context", { path: project.path });
+    const current = projectKnowledge(snapshot, project.id);
+    const importedInstructions = contextFiles?.map((file) => `## ${file.name}\n\n${file.content}`).join("\n\n") ?? "";
+    const importedSources = contextFiles?.map((file) => ({ id: `source-${file.name}`, name: file.name, path: file.path, kind: "file" as const, addedAt: new Date().toISOString() })) ?? [];
+    const next = { ...snapshot, activeProjectId: project.id, knowledge: { ...snapshot.knowledge, [project.id]: importedInstructions ? { ...current, instructions: importedInstructions, sources: [...importedSources, ...current.sources.filter((source) => !importedSources.some((item) => item.path === source.path))] } : current } };
     updateSnapshot(next);
-    notify({ tone: "good", text: `Aktywny projekt: ${project.name}.` });
+    notify({ tone: "good", text: `Aktywny projekt: ${project.name}. Wczytano przenośny kontekst.` });
   };
 
   const renameProject = (projectId: string, name: string) => {
