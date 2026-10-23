@@ -307,6 +307,7 @@ function App() {
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const queuedTaskRef = useRef<Array<{ title: string; scope: TaskScope }>>([]);
+  const [queuedTaskCount, setQueuedTaskCount] = useState(0);
   const [autoLaunchQueuedTask, setAutoLaunchQueuedTask] = useState(false);
 
   useEffect(() => {
@@ -552,6 +553,7 @@ function App() {
     const activeTaskCount = snapshot.runs.filter((run) => run.status === "running").length;
     if (activeTaskCount >= Math.max(1, snapshot.routing.maxParallelTasks ?? 4)) {
       queuedTaskRef.current.push({ title, scope: taskScope });
+      setQueuedTaskCount(queuedTaskRef.current.length);
       setTask("");
       notify({ tone: "warn", text: `Zadanie dodano do kolejki. Uruchomi się po zwolnieniu miejsca (${snapshot.routing.maxParallelTasks ?? 4} równoległe sesje).` });
       setView("activity");
@@ -722,6 +724,7 @@ function App() {
     const activeTaskCount = snapshot.runs.filter((run) => run.status === "running").length;
     if (!queued || activeTaskCount >= Math.max(1, snapshot.routing.maxParallelTasks ?? 4)) return;
     queuedTaskRef.current.shift();
+    setQueuedTaskCount(queuedTaskRef.current.length);
     setTaskScope(queued.scope);
     setTask(queued.title);
     setAutoLaunchQueuedTask(true);
@@ -991,7 +994,7 @@ function App() {
             setView={setView}
           />
         )}
-        {view === "activity" && <ActivityView runs={snapshot.runs} projects={snapshot.projects} onSelect={selectRun} />}
+        {view === "activity" && <ActivityView runs={snapshot.runs} projects={snapshot.projects} queuedCount={queuedTaskCount} onSelect={selectRun} />}
         {view === "run" && (
           <RunView
             run={activeRun}
@@ -1114,7 +1117,7 @@ function Overview({ snapshot, activeProject, activeRun, task, setTask, taskScope
   );
 }
 
-function ActivityView({ runs, projects, onSelect }: { runs: Run[]; projects: Project[]; onSelect: (run: Run) => void }) {
+function ActivityView({ runs, projects, queuedCount, onSelect }: { runs: Run[]; projects: Project[]; queuedCount: number; onSelect: (run: Run) => void }) {
   const active = runs.filter((run) => run.status === "running" || run.status === "waiting");
   return <div className="content page-content activity-content"><div className="page-header"><div><span className="eyebrow"><Activity size={13} /> praca równoległa</span><h1>Zadania w tle</h1><p>Każda sesja działa niezależnie. Możesz przełączać projekty i otwierać inne zadania bez zatrzymywania pracy w tle.</p></div><div className="permission-state"><Activity size={14} /> {active.length} aktywnych</div></div><div className="activity-summary"><div><strong>{active.length}</strong><span>aktywnych lub oczekujących</span></div><div><strong>{runs.filter((run) => run.status === "done").length}</strong><span>ukończonych sesji</span></div><div><strong>{runs.filter((run) => run.status === "failed").length}</strong><span>z błędem</span></div></div><section className="background-run-list">{runs.map((run) => { const project = projects.find((item) => item.id === run.projectId); return <button className="background-run" key={run.id} onClick={() => onSelect(run)}><div className={`background-run-icon ${run.status}`}><Activity size={16} /></div><div className="background-run-main"><strong>{run.title}</strong><span>{project?.name ?? "Bez projektu"} · {run.model ?? "router automatyczny"}</span><small>{run.routingReason ?? "sesja lokalna"}</small></div><div className="background-run-progress"><span className={`status-text ${run.status}`}>{statusLabel(run.status)}</span><div className="progress-track"><div className={`progress-fill ${run.status}`} style={{ width: `${run.progress}%` }} /></div><small>{run.progress}% · {run.estimatedCost ? `$${run.estimatedCost.toFixed(4)}` : "lokalnie"}</small></div><ArrowUpRight size={15} className="muted" /></button> })}{runs.length === 0 && <EmptyInline icon={<Activity size={20} />} title="Nie ma jeszcze zadań" description="Uruchom intencję z Centrum pracy, a sesja pojawi się tutaj." />}</section></div>;
 }
