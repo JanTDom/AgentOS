@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::Manager;
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use url::Url;
 use walkdir::WalkDir;
 
@@ -871,10 +871,19 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            if let Some(window) = app.get_webview_window("main") {
-                window.show().map_err(|error| error.to_string())?;
-                window.set_focus().map_err(|error| error.to_string())?;
-            }
+            let window = if let Some(window) = app.get_webview_window("main") {
+                window
+            } else {
+                WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                    .title("AgentOS")
+                    .inner_size(1440.0, 1024.0)
+                    .min_inner_size(1100.0, 740.0)
+                    .resizable(true)
+                    .build()
+                    .map_err(|error| error.to_string())?
+            };
+            window.show().map_err(|error| error.to_string())?;
+            window.set_focus().map_err(|error| error.to_string())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
