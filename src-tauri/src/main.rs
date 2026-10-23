@@ -870,6 +870,13 @@ fn computer_action(action: String, target: String, approved: bool) -> Result<Str
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                window.show().map_err(|error| error.to_string())?;
+                window.set_focus().map_err(|error| error.to_string())?;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
             save_snapshot,
