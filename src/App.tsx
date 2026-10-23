@@ -949,6 +949,17 @@ function App() {
       return;
     }
     const recovered = await tryInvoke<{ runId: string; projectPath: string; worktreePath?: string }>("recover_checkpoint", { projectPath: activeProject.path, runId: run.id });
+    if (recovered) {
+      const recoveryItem: TimelineItem = {
+        id: `recovery-${Date.now()}`,
+        kind: "evidence",
+        title: "Checkpoint odtworzony",
+        description: recovered.worktreePath ? "Izolowane środowisko jest gotowe do dalszej pracy." : "Integralność checkpointu potwierdzona.",
+        status: "done",
+        time: new Date().toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" }),
+      };
+      updateSnapshot({ ...snapshot, runs: snapshot.runs.map((item) => item.id === run.id ? { ...item, status: item.status === "failed" ? "waiting" : item.status, progress: item.status === "failed" ? Math.min(item.progress, 99) : item.progress, worktreePath: recovered.worktreePath ?? item.worktreePath, timeline: [...item.timeline.filter((entry) => entry.id !== "recovery-latest"), recoveryItem] } : item) });
+    }
     notify(recovered ? { tone: "good", text: recovered.worktreePath ? `Checkpoint jest gotowy w izolowanym worktree: ${recovered.worktreePath}` : "Checkpoint jest poprawny i gotowy do wznowienia." } : { tone: "bad", text: "Nie udało się odtworzyć checkpointu. Pliki projektu nie zostały zmienione." });
   };
 
