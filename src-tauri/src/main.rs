@@ -742,6 +742,76 @@ fn computer_action(action: String, target: String, approved: bool) -> Result<Str
         return Err("Akcja wymaga jawnego zatwierdzenia".to_string());
     }
     match action.as_str() {
+        "activate_app" => {
+            if target.trim().is_empty() || target.len() > 120 || target.contains('\n') {
+                return Err("Podaj krótką nazwę aplikacji bez znaków nowej linii".to_string());
+            }
+            Command::new("open")
+                .args(["-a", target.trim()])
+                .status()
+                .map_err(|error| error.to_string())?;
+            Ok(format!("Aktywowano aplikację: {}", target.trim()))
+        }
+        "click" => {
+            let parts: Vec<&str> = target.split(',').map(str::trim).collect();
+            if parts.len() != 2
+                || parts.iter().any(|part| part.parse::<i32>().is_err())
+                || parts.iter().any(|part| {
+                    part.parse::<i32>().unwrap_or(-1) < 0
+                        || part.parse::<i32>().unwrap_or(0) > 10000
+                })
+            {
+                return Err("Współrzędne muszą mieć format x,y w zakresie 0–10000".to_string());
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let script = format!(
+                    "tell application \"System Events\" to click at {{{}, {}}}",
+                    parts[0], parts[1]
+                );
+                let output = Command::new("osascript")
+                    .args(["-e", &script])
+                    .output()
+                    .map_err(|error| error.to_string())?;
+                if !output.status.success() {
+                    return Err(format!(
+                        "Kliknięcie wymaga uprawnienia Dostępność: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    ));
+                }
+                return Ok(format!("Kliknięto w ({}, {})", parts[0], parts[1]));
+            }
+            #[cfg(not(target_os = "macos"))]
+            return Err("Sterowanie współrzędnymi jest dostępne tylko na macOS".to_string());
+        }
+        "type_text" => {
+            if target.len() > 2000 || target.contains('\0') {
+                return Err(
+                    "Tekst ma nieprawidłowy format albo przekracza limit 2000 znaków".to_string(),
+                );
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let escaped = target.replace('\\', "\\\\").replace('"', "\\\"");
+                let script = format!(
+                    "tell application \"System Events\" to keystroke \"{}\"",
+                    escaped
+                );
+                let output = Command::new("osascript")
+                    .args(["-e", &script])
+                    .output()
+                    .map_err(|error| error.to_string())?;
+                if !output.status.success() {
+                    return Err(format!(
+                        "Wpisywanie wymaga uprawnienia Dostępność: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    ));
+                }
+                return Ok("Wpisano zatwierdzony tekst".to_string());
+            }
+            #[cfg(not(target_os = "macos"))]
+            return Err("Sterowanie klawiaturą jest dostępne tylko na macOS".to_string());
+        }
         "open_url" => {
             let parsed = validate_http_url(&target)?;
             Command::new("open")
