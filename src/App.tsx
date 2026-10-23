@@ -210,6 +210,7 @@ function chooseProvider(
 function buildTaskPrompt(prompt: string, knowledge: ProjectKnowledge, globalMemory: MemoryItem[], projectPath: string, mode: TaskScope): string {
   const enabledMemory = [...globalMemory, ...knowledge.memory].filter((item) => item.enabled).slice(0, 40);
   const enabledAgents = knowledge.agents.filter((agent) => agent.enabled);
+  const trustedSkills = (knowledge.skills ?? []).filter((skill) => skill.enabled && skill.trusted);
   const context = [
     `Projekt: ${projectPath || "brak aktywnego katalogu"}`,
     `Tryb: ${mode}`,
@@ -217,6 +218,7 @@ function buildTaskPrompt(prompt: string, knowledge: ProjectKnowledge, globalMemo
     enabledMemory.length ? `Pamięć z pochodzeniem:\n${enabledMemory.map((item) => `- ${item.title} [${item.source}]: ${item.content}`).join("\n")}` : "",
     knowledge.sources.length ? `Źródła dostępne w projekcie:\n${knowledge.sources.map((source) => `- ${source.name}: ${source.path}`).join("\n")}` : "",
     enabledAgents.length ? `Role agentów do uwzględnienia:\n${enabledAgents.map((agent) => `- ${agent.name} (${agent.role}): ${agent.instructions}`).join("\n")}` : "",
+    trustedSkills.length ? `Zaufane skille projektu (opisowe, bez automatycznego wykonywania):\n${trustedSkills.map((skill) => `- ${skill.name} ${skill.version}: ${skill.description}`).join("\n")}` : "",
   ].filter(Boolean).join("\n\n");
   return `${context}\n\nZadanie użytkownika:\n${prompt}`;
 }

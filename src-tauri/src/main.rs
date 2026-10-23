@@ -75,6 +75,44 @@ struct CheckpointRecord {
     worktree_path: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct SkillManifestRecord {
+    id: String,
+    name: String,
+    version: String,
+    description: String,
+    source: String,
+    trusted: bool,
+    enabled: bool,
+}
+
+fn valid_skill_manifest(value: &Value) -> bool {
+    ["id", "name", "version", "description", "source"]
+        .iter()
+        .all(|key| value.get(key).and_then(Value::as_str).is_some_and(|text| !text.trim().is_empty()))
+}
+
+#[tauri::command]
+fn list_project_skills(project_path: String) -> Result<Vec<SkillManifestRecord>, String> {
+    let root = PathBuf::from(&project_path);
+    let dir = root.join(".agentos").join("skills");
+    if !dir.is_dir() { return Ok(Vec::new()); }
+    let mut skills = Vec::new();
+    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if path.extension().and_then(|v| v.to_str()) != Some("json") { continue; }
+        let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+        let value: Value = serde_json::from_slice(&bytes).map_err(|e| format!("Nieprawidłowy manifest skillu {}: {e}", path.display()))?;
+        if !valid_skill_manifest(&value) { return Err(format!("Manifest skillu {} nie zawiera wymaganych pól", path.display())); }
+        let mut skill: SkillManifestRecord = serde_json::from_value(value).map_err(|e| e.to_string())?;
+        skill.source = path.display().to_string();
+        skills.push(skill);
+    }
+    skills.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(skills)
+}
+
 fn safe_id(value: &str) -> bool {
     !value.is_empty() && value.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
 }
@@ -510,6 +548,7 @@ pub fn run() {
             create_checkpoint,
             list_checkpoints,
             prepare_worktree,
+            list_project_skills,
             save_provider,
             get_provider_key_statuses,
             run_model,
@@ -527,7 +566,15 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use keyring::Entry;
-    use super::{uuid_like, validate_http_url, KEYRING_SERVICE};
+    use super::{uuid_like, validate_http_url, valid_skill_manifest, KEYRING_SERVICE};
+
+    #[test]
+    fn validates_skill_manifest_contract() {
+        let good = serde_json::json!({"id":"review","name":"Review","version":"1.0.0","description":"Review code","source":"local"});
+        let bad = serde_json::json!({"id":"review"});
+        assert!(valid_skill_manifest(&good));
+        assert!(!valid_skill_manifest(&bad));
+    }
 
     #[test]
     fn blocks_private_network_targets() {

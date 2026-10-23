@@ -116,6 +116,7 @@ export type ProjectKnowledge = {
   memory: MemoryItem[];
   sources: ProjectSource[];
   agents: AgentDefinition[];
+  skills?: SkillDefinition[];
 };
 
 export type RoutingPolicy = {
