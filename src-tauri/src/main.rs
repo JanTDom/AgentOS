@@ -148,6 +148,20 @@ fn list_checkpoints(project_path: String) -> Result<Vec<CheckpointRecord>, Strin
 }
 
 #[tauri::command]
+fn recover_checkpoint(project_path: String, run_id: String) -> Result<CheckpointRecord, String> {
+    let root = PathBuf::from(&project_path);
+    if !root.is_dir() || !safe_id(&run_id) { return Err("Nieprawidłowy katalog projektu lub identyfikator checkpointu".into()); }
+    let path = checkpoint_dir(&root).join(format!("{run_id}.json"));
+    let bytes = std::fs::read(&path).map_err(|_| "Checkpoint nie istnieje albo został usunięty".to_string())?;
+    let record: CheckpointRecord = serde_json::from_slice(&bytes).map_err(|_| "Checkpoint jest uszkodzony i nie może zostać odzyskany".to_string())?;
+    if record.run_id != run_id || record.project_path != project_path { return Err("Checkpoint nie pasuje do wybranego projektu".into()); }
+    if let Some(worktree) = &record.worktree_path {
+        if !Path::new(worktree).is_dir() { return Err("Izolowany worktree checkpointu nie istnieje".into()); }
+    }
+    Ok(record)
+}
+
+#[tauri::command]
 fn prepare_worktree(project_path: String, run_id: String) -> Result<String, String> {
     let root = PathBuf::from(&project_path);
     if !root.join(".git").is_dir() || !safe_id(&run_id) { return Err("Izolacja wymaga repozytorium Git i bezpiecznego identyfikatora".into()); }
@@ -562,6 +576,7 @@ pub fn run() {
             read_project_context,
             create_checkpoint,
             list_checkpoints,
+            recover_checkpoint,
             prepare_worktree,
             list_project_skills,
             save_provider,
