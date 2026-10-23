@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AgentOS",
+  "version": "0.1.0",
+  "identifier": "pl.agentos.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "AgentOS",
+        "width": 1440,
+        "height": 1024,
+        "minWidth": 1100,
+        "minHeight": 740,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost http: https:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": ["icons/32x32.png", "icons/64x64.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "category": "Productivity",
+    "shortDescription": "Command center dla agentów AI",
+    "longDescription": "AgentOS łączy projekty, modele, sieć, dowody i bezpieczne akcje systemowe w jednym lokalnym centrum pracy.",
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  }
+}
