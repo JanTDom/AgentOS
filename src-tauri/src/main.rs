@@ -871,6 +871,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            app.set_activation_policy(tauri::ActivationPolicy::Regular);
             let window = if let Some(window) = app.get_webview_window("main") {
                 window
             } else {
@@ -879,6 +880,7 @@ pub fn run() {
                     .inner_size(1440.0, 1024.0)
                     .min_inner_size(1100.0, 740.0)
                     .resizable(true)
+                    .visible(true)
                     .build()
                     .map_err(|error| error.to_string())?
             };
