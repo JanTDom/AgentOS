@@ -92,6 +92,25 @@ export type AgentDefinition = {
   enabled: boolean;
 };
 
+export type EvidenceArtifact = {
+  id: string;
+  kind: "response" | "source" | "test" | "checkpoint" | "worktree";
+  title: string;
+  detail: string;
+  createdAt: string;
+};
+
+export type SkillDefinition = {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  source: string;
+  sha256?: string;
+  enabled: boolean;
+  trusted: boolean;
+};
+
 export type ProjectKnowledge = {
   instructions: string;
   memory: MemoryItem[];
@@ -137,6 +156,7 @@ export type Run = {
   estimatedCost?: number;
   worktreePath?: string;
   checkpointPath?: string;
+  evidence?: EvidenceArtifact[];
 };
 
 export type AppSnapshot = {

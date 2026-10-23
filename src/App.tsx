@@ -48,6 +48,7 @@ import {
   AgentDefinition,
   defaultSnapshot,
   MemoryItem,
+  EvidenceArtifact,
   Project,
   ProjectKnowledge,
   ProjectSource,
@@ -565,6 +566,11 @@ function App() {
                 progress: 100,
                 response: modelResult,
                 messages: [...initialMessages, { role: "assistant", content: modelResult }],
+                evidence: [
+                  { id: `evidence-${newRun.id}-response`, kind: "response", title: "Odpowiedź modelu", detail: `${modelResult.length} znaków z ${routedProvider.name}`, createdAt: new Date().toISOString() },
+                  ...(run.checkpointPath ? [{ id: `evidence-${newRun.id}-checkpoint`, kind: "checkpoint" as const, title: "Checkpoint sesji", detail: run.checkpointPath, createdAt: new Date().toISOString() }] : []),
+                  ...(run.worktreePath ? [{ id: `evidence-${newRun.id}-worktree`, kind: "worktree" as const, title: "Izolowany worktree", detail: run.worktreePath, createdAt: new Date().toISOString() }] : []),
+                ] satisfies EvidenceArtifact[],
                 timeline: run.timeline.map((item) =>
                   item.id === "new-plan"
                     ? { ...item, status: "done", description: "Odpowiedź jest gotowa." }
