@@ -552,6 +552,13 @@ function App() {
       setView("models");
       return;
     }
+    const today = new Date().toISOString().slice(0, 10);
+    const spentToday = snapshot.usageLedger.filter((entry) => entry.createdAt.slice(0, 10) === today).reduce((sum, entry) => sum + entry.estimatedCost, 0);
+    if (routedProvider.kind !== "ollama" && snapshot.routing.dailyBudget > 0 && spentToday + route.estimatedCost > snapshot.routing.dailyBudget) {
+      notify({ tone: "warn", text: `Budżet dzienny zostałby przekroczony (${spentToday.toFixed(4)} + ${route.estimatedCost.toFixed(4)} USD). AgentOS nie uruchomił płatnego zadania.` });
+      setView("models");
+      return;
+    }
     const initialMessages: ChatMessage[] = [{ role: "user", content: title }];
     const newRun: Run = {
       id: `run-${Date.now()}`,
