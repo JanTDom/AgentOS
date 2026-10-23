@@ -4,9 +4,9 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tauri::Manager;
 use url::Url;
 use walkdir::WalkDir;
-use tauri::Manager;
 
 const KEYRING_SERVICE: &str = "pl.agentos.desktop";
 
@@ -91,22 +91,41 @@ struct SkillManifestRecord {
 fn valid_skill_manifest(value: &Value) -> bool {
     ["id", "name", "version", "description", "source"]
         .iter()
-        .all(|key| value.get(key).and_then(Value::as_str).is_some_and(|text| !text.trim().is_empty()))
+        .all(|key| {
+            value
+                .get(key)
+                .and_then(Value::as_str)
+                .is_some_and(|text| !text.trim().is_empty())
+        })
 }
 
 #[tauri::command]
 fn list_project_skills(project_path: String) -> Result<Vec<SkillManifestRecord>, String> {
     let root = PathBuf::from(&project_path);
+    if !root.is_dir() {
+        return Err("Katalog projektu nie istnieje".into());
+    }
     let dir = root.join(".agentos").join("skills");
-    if !dir.is_dir() { return Ok(Vec::new()); }
+    if !dir.is_dir() {
+        return Ok(Vec::new());
+    }
     let mut skills = Vec::new();
     for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
         let path = entry.map_err(|e| e.to_string())?.path();
-        if path.extension().and_then(|v| v.to_str()) != Some("json") { continue; }
+        if path.extension().and_then(|v| v.to_str()) != Some("json") {
+            continue;
+        }
         let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-        let value: Value = serde_json::from_slice(&bytes).map_err(|e| format!("Nieprawidłowy manifest skillu {}: {e}", path.display()))?;
-        if !valid_skill_manifest(&value) { return Err(format!("Manifest skillu {} nie zawiera wymaganych pól", path.display())); }
-        let mut skill: SkillManifestRecord = serde_json::from_value(value).map_err(|e| e.to_string())?;
+        let value: Value = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("Nieprawidłowy manifest skillu {}: {e}", path.display()))?;
+        if !valid_skill_manifest(&value) {
+            return Err(format!(
+                "Manifest skillu {} nie zawiera wymaganych pól",
+                path.display()
+            ));
+        }
+        let mut skill: SkillManifestRecord =
+            serde_json::from_value(value).map_err(|e| e.to_string())?;
         skill.source = path.display().to_string();
         skills.push(skill);
     }
@@ -115,21 +134,49 @@ fn list_project_skills(project_path: String) -> Result<Vec<SkillManifestRecord>,
 }
 
 fn safe_id(value: &str) -> bool {
-    !value.is_empty() && value.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
 }
 
-fn checkpoint_dir(root: &Path) -> PathBuf { root.join(".agentos").join("checkpoints") }
+fn checkpoint_dir(root: &Path) -> PathBuf {
+    root.join(".agentos").join("checkpoints")
+}
 
 #[tauri::command]
-fn create_checkpoint(project_path: String, run_id: String, worktree_path: Option<String>) -> Result<CheckpointRecord, String> {
+fn create_checkpoint(
+    project_path: String,
+    run_id: String,
+    worktree_path: Option<String>,
+) -> Result<CheckpointRecord, String> {
     let root = PathBuf::from(&project_path);
-    if !root.is_dir() || !safe_id(&run_id) { return Err("Nieprawidłowy katalog projektu lub identyfikator zadania".into()); }
+    if !root.is_dir() || !safe_id(&run_id) {
+        return Err("Nieprawidłowy katalog projektu lub identyfikator zadania".into());
+    }
     let dir = checkpoint_dir(&root);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Nie udało się utworzyć checkpointu: {e}"))?;
-    let git_head = Command::new("git").args(["-C", &project_path, "rev-parse", "HEAD"]).output().ok().filter(|o| o.status.success()).and_then(|o| String::from_utf8(o.stdout).ok()).map(|s| s.trim().to_string());
-    let record = CheckpointRecord { run_id: run_id.clone(), project_path: project_path.clone(), created_at: format!("{:?}", SystemTime::now()), git_head, worktree_path };
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Nie udało się utworzyć checkpointu: {e}"))?;
+    let git_head = Command::new("git")
+        .args(["-C", &project_path, "rev-parse", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string());
+    let record = CheckpointRecord {
+        run_id: run_id.clone(),
+        project_path: project_path.clone(),
+        created_at: format!("{:?}", SystemTime::now()),
+        git_head,
+        worktree_path,
+    };
     let path = dir.join(format!("{run_id}.json"));
-    std::fs::write(path, serde_json::to_vec_pretty(&record).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    std::fs::write(
+        path,
+        serde_json::to_vec_pretty(&record).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
     Ok(record)
 }
 
@@ -137,12 +184,20 @@ fn create_checkpoint(project_path: String, run_id: String, worktree_path: Option
 fn list_checkpoints(project_path: String) -> Result<Vec<CheckpointRecord>, String> {
     let root = PathBuf::from(&project_path);
     let dir = checkpoint_dir(&root);
-    if !dir.is_dir() { return Ok(Vec::new()); }
+    if !dir.is_dir() {
+        return Ok(Vec::new());
+    }
     let mut records = Vec::new();
     for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
         let path = entry.map_err(|e| e.to_string())?.path();
-        if path.extension().and_then(|v| v.to_str()) != Some("json") { continue; }
-        if let Ok(bytes) = std::fs::read(path) { if let Ok(record) = serde_json::from_slice(&bytes) { records.push(record); } }
+        if path.extension().and_then(|v| v.to_str()) != Some("json") {
+            continue;
+        }
+        if let Ok(bytes) = std::fs::read(path) {
+            if let Ok(record) = serde_json::from_slice(&bytes) {
+                records.push(record);
+            }
+        }
     }
     Ok(records)
 }
@@ -150,13 +205,21 @@ fn list_checkpoints(project_path: String) -> Result<Vec<CheckpointRecord>, Strin
 #[tauri::command]
 fn recover_checkpoint(project_path: String, run_id: String) -> Result<CheckpointRecord, String> {
     let root = PathBuf::from(&project_path);
-    if !root.is_dir() || !safe_id(&run_id) { return Err("Nieprawidłowy katalog projektu lub identyfikator checkpointu".into()); }
+    if !root.is_dir() || !safe_id(&run_id) {
+        return Err("Nieprawidłowy katalog projektu lub identyfikator checkpointu".into());
+    }
     let path = checkpoint_dir(&root).join(format!("{run_id}.json"));
-    let bytes = std::fs::read(&path).map_err(|_| "Checkpoint nie istnieje albo został usunięty".to_string())?;
-    let record: CheckpointRecord = serde_json::from_slice(&bytes).map_err(|_| "Checkpoint jest uszkodzony i nie może zostać odzyskany".to_string())?;
-    if record.run_id != run_id || record.project_path != project_path { return Err("Checkpoint nie pasuje do wybranego projektu".into()); }
+    let bytes = std::fs::read(&path)
+        .map_err(|_| "Checkpoint nie istnieje albo został usunięty".to_string())?;
+    let record: CheckpointRecord = serde_json::from_slice(&bytes)
+        .map_err(|_| "Checkpoint jest uszkodzony i nie może zostać odzyskany".to_string())?;
+    if record.run_id != run_id || record.project_path != project_path {
+        return Err("Checkpoint nie pasuje do wybranego projektu".into());
+    }
     if let Some(worktree) = &record.worktree_path {
-        if !Path::new(worktree).is_dir() { return Err("Izolowany worktree checkpointu nie istnieje".into()); }
+        if !Path::new(worktree).is_dir() {
+            return Err("Izolowany worktree checkpointu nie istnieje".into());
+        }
     }
     Ok(record)
 }
@@ -164,13 +227,30 @@ fn recover_checkpoint(project_path: String, run_id: String) -> Result<Checkpoint
 #[tauri::command]
 fn prepare_worktree(project_path: String, run_id: String) -> Result<String, String> {
     let root = PathBuf::from(&project_path);
-    if !root.join(".git").is_dir() || !safe_id(&run_id) { return Err("Izolacja wymaga repozytorium Git i bezpiecznego identyfikatora".into()); }
+    if !root.join(".git").is_dir() || !safe_id(&run_id) {
+        return Err("Izolacja wymaga repozytorium Git i bezpiecznego identyfikatora".into());
+    }
     let parent = root.join(".agentos").join("worktrees");
     std::fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
     let target = parent.join(&run_id);
-    if target.exists() { return Ok(target.display().to_string()); }
-    let output = Command::new("git").args(["-C", &project_path, "worktree", "add", "--detach", target.to_string_lossy().as_ref(), "HEAD"]).output().map_err(|e| e.to_string())?;
-    if !output.status.success() { return Err(String::from_utf8_lossy(&output.stderr).trim().to_string()); }
+    if target.exists() {
+        return Ok(target.display().to_string());
+    }
+    let output = Command::new("git")
+        .args([
+            "-C",
+            &project_path,
+            "worktree",
+            "add",
+            "--detach",
+            target.to_string_lossy().as_ref(),
+            "HEAD",
+        ])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
     Ok(target.display().to_string())
 }
 
@@ -200,8 +280,14 @@ fn validate_http_url(raw: &str) -> Result<Url, String> {
 
 #[tauri::command]
 fn get_snapshot(app: tauri::AppHandle) -> Result<Value, String> {
-    let path = app.path().app_data_dir().map_err(|e| e.to_string())?.join("snapshot.json");
-    if !path.is_file() { return Ok(Value::Null); }
+    let path = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("snapshot.json");
+    if !path.is_file() {
+        return Ok(Value::Null);
+    }
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     serde_json::from_slice(&bytes).map_err(|e| format!("Nieprawidłowy snapshot AgentOS: {e}"))
 }
@@ -212,7 +298,11 @@ fn save_snapshot(app: tauri::AppHandle, snapshot: Value) -> Result<(), String> {
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join("snapshot.json");
     let temp = dir.join("snapshot.json.tmp");
-    std::fs::write(&temp, serde_json::to_vec_pretty(&snapshot).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    std::fs::write(
+        &temp,
+        serde_json::to_vec_pretty(&snapshot).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
     std::fs::rename(temp, path).map_err(|e| e.to_string())
 }
 
@@ -508,7 +598,17 @@ async fn web_fetch(url: String) -> Result<String, String> {
         .await
         .map_err(|error| error.to_string())?;
     let status = response.status();
-    let text = response.text().await.map_err(|error| error.to_string())?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > 2_000_000)
+    {
+        return Err("Odpowiedź sieciowa przekracza limit 2 MB".to_string());
+    }
+    let bytes = response.bytes().await.map_err(|error| error.to_string())?;
+    if bytes.len() > 2_000_000 {
+        return Err("Odpowiedź sieciowa przekracza limit 2 MB".to_string());
+    }
+    let text = String::from_utf8_lossy(&bytes).to_string();
     if !status.is_success() {
         return Err(format!("Strona zwróciła {}", status));
     }
@@ -595,8 +695,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use super::{uuid_like, valid_skill_manifest, validate_http_url, KEYRING_SERVICE};
     use keyring::Entry;
-    use super::{uuid_like, validate_http_url, valid_skill_manifest, KEYRING_SERVICE};
 
     #[test]
     fn validates_skill_manifest_contract() {
@@ -622,12 +722,17 @@ mod tests {
     #[test]
     fn macos_keychain_round_trip_works() {
         let account = format!("regression-test-{}", uuid_like("agentos-keychain"));
-        let entry = Entry::new(KEYRING_SERVICE, &account).expect("Keychain entry should be constructible");
-        entry.set_password("agentos-regression-secret").expect("Keychain write should succeed");
+        let entry =
+            Entry::new(KEYRING_SERVICE, &account).expect("Keychain entry should be constructible");
+        entry
+            .set_password("agentos-regression-secret")
+            .expect("Keychain write should succeed");
         assert_eq!(
             entry.get_password().expect("Keychain read should succeed"),
             "agentos-regression-secret"
         );
-        entry.delete_credential().expect("Keychain cleanup should succeed");
+        entry
+            .delete_credential()
+            .expect("Keychain cleanup should succeed");
     }
 }
