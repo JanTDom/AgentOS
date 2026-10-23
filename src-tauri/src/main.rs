@@ -607,7 +607,9 @@ fn save_provider(provider: ProviderRecord, api_key: String) -> Result<ProviderKe
 }
 
 #[tauri::command]
-fn get_provider_key_statuses(provider_ids: Vec<String>) -> Result<Vec<ProviderKeyStatus>, String> {
+async fn get_provider_key_statuses(
+    provider_ids: Vec<String>,
+) -> Result<Vec<ProviderKeyStatus>, String> {
     provider_ids
         .into_iter()
         .map(|provider_id| {
