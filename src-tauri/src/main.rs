@@ -69,8 +69,12 @@ struct ContextFileRecord {
 #[tauri::command]
 fn write_project_context(path: String, content: String) -> Result<String, String> {
     let root = PathBuf::from(&path);
-    if !root.is_dir() { return Err("Katalog projektu nie istnieje".into()); }
-    if content.len() > 30_000 { return Err("Instrukcje projektu przekraczają limit 30 000 znaków".into()); }
+    if !root.is_dir() {
+        return Err("Katalog projektu nie istnieje".into());
+    }
+    if content.len() > 30_000 {
+        return Err("Instrukcje projektu przekraczają limit 30 000 znaków".into());
+    }
     let target = root.join("PROJECT_CONTEXT.md");
     let temp = root.join(".agentos-project-context.tmp");
     std::fs::write(&temp, content.as_bytes()).map_err(|e| e.to_string())?;
@@ -143,6 +147,70 @@ fn list_project_skills(project_path: String) -> Result<Vec<SkillManifestRecord>,
     }
     skills.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     Ok(skills)
+}
+
+#[tauri::command]
+async fn download_skill_manifest(
+    project_path: String,
+    url: String,
+) -> Result<SkillManifestRecord, String> {
+    let root = PathBuf::from(&project_path);
+    if !root.is_dir() {
+        return Err("Katalog projektu nie istnieje".into());
+    }
+    let parsed = validate_http_url(&url)?;
+    if parsed.scheme() != "https"
+        || !matches!(
+            parsed.host_str(),
+            Some("github.com") | Some("raw.githubusercontent.com")
+        )
+    {
+        return Err(
+            "Skill można pobrać wyłącznie z github.com lub raw.githubusercontent.com przez HTTPS"
+                .into(),
+        );
+    }
+    let client = Client::builder()
+        .timeout(Duration::from_secs(20))
+        .redirect(reqwest::redirect::Policy::limited(2))
+        .user_agent("AgentOS/0.1 skill importer")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let response = client.get(parsed).send().await.map_err(|e| e.to_string())?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > 256_000)
+    {
+        return Err("Manifest skillu przekracza limit 256 KB".into());
+    }
+    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+    if bytes.len() > 256_000 {
+        return Err("Manifest skillu przekracza limit 256 KB".into());
+    }
+    let mut value: Value = serde_json::from_slice(&bytes)
+        .map_err(|e| format!("Manifest nie jest poprawnym JSON-em: {e}"))?;
+    if !valid_skill_manifest(&value) {
+        return Err("Manifest nie zawiera wymaganych pól skillu".into());
+    }
+    let id = value
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    if !safe_id(&id) {
+        return Err("Identyfikator skillu zawiera niedozwolone znaki".into());
+    }
+    value["source"] = Value::String(url);
+    value["trusted"] = Value::Bool(false);
+    value["enabled"] = Value::Bool(false);
+    let dir = root.join(".agentos").join("skills");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(
+        dir.join(format!("{id}.json")),
+        serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    serde_json::from_value(value).map_err(|e| e.to_string())
 }
 
 fn safe_id(value: &str) -> bool {
@@ -692,6 +760,7 @@ pub fn run() {
             recover_checkpoint,
             prepare_worktree,
             list_project_skills,
+            download_skill_manifest,
             save_provider,
             get_provider_key_statuses,
             run_model,
