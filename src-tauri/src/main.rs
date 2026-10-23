@@ -6,6 +6,7 @@ use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use url::Url;
 use walkdir::WalkDir;
+use tauri::Manager;
 
 const KEYRING_SERVICE: &str = "pl.agentos.desktop";
 
@@ -184,8 +185,21 @@ fn validate_http_url(raw: &str) -> Result<Url, String> {
 }
 
 #[tauri::command]
-fn get_snapshot() -> Result<Value, String> {
-    Ok(Value::Null)
+fn get_snapshot(app: tauri::AppHandle) -> Result<Value, String> {
+    let path = app.path().app_data_dir().map_err(|e| e.to_string())?.join("snapshot.json");
+    if !path.is_file() { return Ok(Value::Null); }
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    serde_json::from_slice(&bytes).map_err(|e| format!("Nieprawidłowy snapshot AgentOS: {e}"))
+}
+
+#[tauri::command]
+fn save_snapshot(app: tauri::AppHandle, snapshot: Value) -> Result<(), String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("snapshot.json");
+    let temp = dir.join("snapshot.json.tmp");
+    std::fs::write(&temp, serde_json::to_vec_pretty(&snapshot).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    std::fs::rename(temp, path).map_err(|e| e.to_string())
 }
 
 fn price_as_f64(value: &Value) -> Option<f64> {
@@ -542,6 +556,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
+            save_snapshot,
             discover_model_offers,
             inspect_project,
             read_project_context,

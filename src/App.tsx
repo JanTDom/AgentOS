@@ -282,10 +282,12 @@ function App() {
     key: "",
   });
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     void tryInvoke<AppSnapshot>("get_snapshot").then((remote) => {
       if (remote) setSnapshot(remote);
+      setHydrated(true);
     });
   }, []);
 
@@ -307,8 +309,10 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!hydrated) return;
     saveLocal(snapshot);
-  }, [snapshot]);
+    void tryInvoke("save_snapshot", { snapshot });
+  }, [snapshot, hydrated]);
 
   useEffect(() => {
     saveLocalValue("agentos-profile", profile);
