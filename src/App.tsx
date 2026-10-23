@@ -1034,6 +1034,7 @@ function App() {
           />
         )}
         {view === "workspace" && <WorkspaceView project={activeProject} knowledge={activeKnowledge} globalMemory={snapshot.globalMemory} providers={snapshot.providers} onKnowledgeChange={updateActiveKnowledge} onAddSource={() => void addProjectSource()} onAddMemory={addMemory} onAddAgent={addAgent} onExport={exportProjectContext} onImport={(file) => void importProjectContext(file)} />}
+        {view === "workspace" && <SkillImportBar project={activeProject} onImported={(skill) => updateActiveKnowledge({ ...activeKnowledge, skills: [...(activeKnowledge.skills ?? []).filter((item) => item.id !== skill.id), skill] })} />}
         {view === "workspace" && <SkillPanel project={activeProject} skills={activeKnowledge.skills ?? []} onChange={(skills) => updateActiveKnowledge({ ...activeKnowledge, skills })} />}
         {view === "workspace" && <PortableContextPanel project={activeProject} knowledge={activeKnowledge} />}
         {view === "computer" && <ComputerView activeProject={activeProject} runAction={runComputerAction} busy={isBusy} enabled={permissions.computer} onToggle={() => updatePermission("computer")} />}
@@ -1204,6 +1205,17 @@ function SkillPanel({ project, skills, onChange }: { project: Project; skills: S
   };
   const toggleSkill = (id: string) => onChange(skills.map((skill) => skill.id === id ? { ...skill, enabled: !skill.enabled } : skill));
   return <section className="knowledge-panel skill-panel"><div className="panel-heading"><div><strong>Skille projektu</strong><span>Manifesty są tylko opisem dopuszczonego kontekstu. AgentOS nie wykonuje pobranego kodu automatycznie.</span></div><button className="secondary-button" onClick={() => void loadSkills}><RefreshCw size={14} /> {loaded ? "Odśwież" : "Wczytaj manifesty"}</button></div><div className="skill-list">{skills.map((skill) => <article className="skill-item" key={skill.id}><div><strong>{skill.name} <small>v{skill.version}</small></strong><span>{skill.description}</span><small>{skill.source}</small></div><div className="skill-item-actions"><span className={`status-chip ${skill.trusted ? "active" : "waiting"}`}>{skill.trusted ? "zaufany" : "wymaga zaufania"}</span><button className={`ghost-button ${skill.enabled ? "" : "danger-text"}`} onClick={() => toggleSkill(skill.id)}>{skill.enabled ? "Wyłącz" : "Włącz"}</button></div></article>)}{skills.length === 0 && <EmptyInline icon={<Zap size={20} />} title="Nie ma jeszcze skillów" description="Dodaj manifest JSON do katalogu .agentos/skills i wczytaj go jawnie." />}</div>{message && <div className="knowledge-hint"><ShieldCheck size={14} /> {message}</div>}</section>;
+}
+
+function SkillImportBar({ project, onImported }: { project: Project; onImported: (skill: SkillDefinition) => void }) {
+  const [url, setUrl] = useState("");
+  const [message, setMessage] = useState("");
+  const importRemote = async () => {
+    const result = await tryInvoke<SkillDefinition>("download_skill_manifest", { projectPath: project.path, url: url.trim() });
+    setMessage(result ? `Pobrano ${result.name}; skill pozostaje wyłączony i niezaufany.` : "Import odrzucony. Użyj HTTPS z GitHub i poprawnego manifestu JSON.");
+    if (result) { onImported(result); setUrl(""); }
+  };
+  return <section className="knowledge-panel skill-import-panel"><div className="panel-heading"><div><strong>Import bezpiecznego skillu</strong><span>Dozwolone są tylko manifesty HTTPS z GitHub. Kod nie jest wykonywany.</span></div><button className="secondary-button" onClick={() => void importRemote} disabled={!url.trim()}><Download size={14} /> Importuj manifest</button></div><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://raw.githubusercontent.com/.../skill.json" />{message && <div className="knowledge-hint"><ShieldCheck size={14} /> {message}</div>}</section>;
 }
 
 function EmptyInline({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
