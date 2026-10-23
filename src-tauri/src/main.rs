@@ -297,8 +297,49 @@ fn recover_checkpoint(project_path: String, run_id: String) -> Result<Checkpoint
         return Err("Checkpoint nie pasuje do wybranego projektu".into());
     }
     if let Some(worktree) = &record.worktree_path {
-        if !Path::new(worktree).is_dir() {
-            return Err("Izolowany worktree checkpointu nie istnieje".into());
+        let expected_parent = checkpoint_dir(&root).parent().unwrap().join("worktrees");
+        let worktree_path = PathBuf::from(worktree);
+        if worktree_path.parent() != Some(expected_parent.as_path())
+            || worktree_path.file_name().and_then(|name| name.to_str()) != Some(run_id.as_str())
+        {
+            return Err("Checkpoint wskazuje na niedozwolony katalog worktree".into());
+        }
+        if !worktree_path.is_dir() {
+            let Some(git_head) = &record.git_head else {
+                return Err("Checkpoint nie ma commita, z którego można odtworzyć worktree".into());
+            };
+            std::fs::create_dir_all(&expected_parent).map_err(|e| e.to_string())?;
+            let output = Command::new("git")
+                .args([
+                    "-C",
+                    &project_path,
+                    "worktree",
+                    "add",
+                    "--detach",
+                    worktree,
+                    git_head,
+                ])
+                .output()
+                .map_err(|e| e.to_string())?;
+            if !output.status.success() {
+                return Err(format!(
+                    "Nie udało się odtworzyć worktree checkpointu: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                ));
+            }
+        }
+        let actual_head = Command::new("git")
+            .args(["-C", worktree, "rev-parse", "HEAD"])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !actual_head.status.success()
+            || record.git_head.as_deref()
+                != String::from_utf8(actual_head.stdout)
+                    .ok()
+                    .map(|head| head.trim().to_string())
+                    .as_deref()
+        {
+            return Err("Worktree checkpointu ma inny commit niż zapisany checkpoint".into());
         }
     }
     Ok(record)
