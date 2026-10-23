@@ -864,6 +864,15 @@ function App() {
     setView("run");
   };
 
+  const recoverRun = async (run: Run) => {
+    if (!run.checkpointPath || !activeProject.path) {
+      notify({ tone: "warn", text: "Ta sesja nie ma checkpointu projektu do odzyskania." });
+      return;
+    }
+    const recovered = await tryInvoke<{ runId: string; projectPath: string; worktreePath?: string }>("recover_checkpoint", { projectPath: activeProject.path, runId: run.id });
+    notify(recovered ? { tone: "good", text: recovered.worktreePath ? `Checkpoint jest gotowy w izolowanym worktree: ${recovered.worktreePath}` : "Checkpoint jest poprawny i gotowy do odzyskania." } : { tone: "bad", text: "Nie udało się zweryfikować checkpointu. Pliki nie zostały zmienione." });
+  };
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -922,6 +931,7 @@ function App() {
             providers={snapshot.providers}
             selectedProviderId={selectedProviderId}
             onProviderChange={setSelectedProviderId}
+            onRecover={() => void recoverRun(activeRun)}
           />
         )}
         {view === "projects" && (
@@ -1030,7 +1040,7 @@ function ActivityView({ runs, projects, onSelect }: { runs: Run[]; projects: Pro
   return <div className="content page-content activity-content"><div className="page-header"><div><span className="eyebrow"><Activity size={13} /> praca równoległa</span><h1>Zadania w tle</h1><p>Każda sesja działa niezależnie. Możesz przełączać projekty i otwierać inne zadania bez zatrzymywania pracy w tle.</p></div><div className="permission-state"><Activity size={14} /> {active.length} aktywnych</div></div><div className="activity-summary"><div><strong>{active.length}</strong><span>aktywnych lub oczekujących</span></div><div><strong>{runs.filter((run) => run.status === "done").length}</strong><span>ukończonych sesji</span></div><div><strong>{runs.filter((run) => run.status === "failed").length}</strong><span>z błędem</span></div></div><section className="background-run-list">{runs.map((run) => { const project = projects.find((item) => item.id === run.projectId); return <button className="background-run" key={run.id} onClick={() => onSelect(run)}><div className={`background-run-icon ${run.status}`}><Activity size={16} /></div><div className="background-run-main"><strong>{run.title}</strong><span>{project?.name ?? "Bez projektu"} · {run.model ?? "router automatyczny"}</span><small>{run.routingReason ?? "sesja lokalna"}</small></div><div className="background-run-progress"><span className={`status-text ${run.status}`}>{statusLabel(run.status)}</span><div className="progress-track"><div className={`progress-fill ${run.status}`} style={{ width: `${run.progress}%` }} /></div><small>{run.progress}% · {run.estimatedCost ? `$${run.estimatedCost.toFixed(4)}` : "lokalnie"}</small></div><ArrowUpRight size={15} className="muted" /></button> })}{runs.length === 0 && <EmptyInline icon={<Activity size={20} />} title="Nie ma jeszcze zadań" description="Uruchom intencję z Centrum pracy, a sesja pojawi się tutaj." />}</section></div>;
 }
 
-function RunView({ run, project, onStart, onView, onComputer, followUpTask, setFollowUpTask, onFollowUp, providers, selectedProviderId, onProviderChange }: { run: Run; project: Project; onStart: () => void; onView: (view: View) => void; onComputer: () => void; followUpTask: string; setFollowUpTask: (value: string) => void; onFollowUp: () => void; providers: Provider[]; selectedProviderId: string; onProviderChange: (value: string) => void }) {
+function RunView({ run, project, onStart, onView, onComputer, followUpTask, setFollowUpTask, onFollowUp, providers, selectedProviderId, onProviderChange, onRecover }: { run: Run; project: Project; onStart: () => void; onView: (view: View) => void; onComputer: () => void; followUpTask: string; setFollowUpTask: (value: string) => void; onFollowUp: () => void; providers: Provider[]; selectedProviderId: string; onProviderChange: (value: string) => void; onRecover: () => void }) {
   const messages = run.messages ?? (run.response
     ? [{ role: "user" as const, content: run.title }, { role: "assistant" as const, content: run.response }]
     : []);
