@@ -29,7 +29,29 @@ export type Project = {
   accessMode: AccessMode;
   providerId?: string;
   contextFiles?: string[];
+  integrations?: ProjectIntegrations;
 };
+
+export type ProjectIntegrations = {
+  vercel?: { projectId?: string; name: string; teamId?: string | null };
+  supabase?: { ref: string; name: string };
+  /** Czy wolno wypychać bezpośrednio na main/master. */
+  allowMainPush?: boolean;
+};
+
+export type McpServer = {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  /** Nazwy zmiennych, których wartości są w pęku kluczy (mcp-<id>-<NAZWA>). */
+  secretKeys: string[];
+  enabled: boolean;
+  autoApprove: boolean;
+};
+
+export type McpTool = { name: string; description: string; inputSchema: Record<string, unknown> };
 
 export type ConversationStatus = "idle" | "running" | "waiting" | "done" | "warning" | "failed" | "stopped";
 
@@ -45,7 +67,9 @@ export type ConversationItem =
   | {
       id: string;
       kind: "approval";
-      tool: "write_file" | "run_command" | "install_skill";
+      tool: string;
+      /** Operacja nieodwracalna lub produkcyjna — wymaga wyraźniejszego potwierdzenia. */
+      danger?: boolean;
       title: string;
       detail: string;
       diff?: DiffLine[];
@@ -108,14 +132,33 @@ export type Snapshot = {
   skillSources: string[];
   /** Wyłączone umiejętności: "global/slug" albo "<projectId>|<location>/<slug>". */
   disabledSkills: string[];
+  mcpServers: McpServer[];
+  /** Połączone konta (nazwa użytkownika) — ustawiane po sprawdzeniu tokenu. */
+  accounts: { github?: string; vercel?: string; supabase?: string };
 };
+
+export type GitStatus = {
+  isRepo: boolean;
+  branch: string;
+  remote?: string | null;
+  githubRepo?: string | null;
+  upstream?: string | null;
+  ahead: number;
+  behind: number;
+  files: Array<{ path: string; status: string }>;
+  lastCommit?: string | null;
+  sensitive: string[];
+};
+
+export type VercelDeployment = { id: string; url?: string | null; state?: string | null; target?: string | null; created?: number; commit?: string | null };
 
 export type Route =
   | { screen: "home" }
-  | { screen: "project"; projectId: string; tab: "chats" | "files" | "changes" | "settings" }
+  | { screen: "project"; projectId: string; tab: "chats" | "files" | "changes" | "publish" | "settings" }
   | { screen: "conversation"; conversationId: string }
   | { screen: "models" }
   | { screen: "skills" }
+  | { screen: "integrations" }
   | { screen: "settings" };
 
 export const LOCAL_KINDS: ProviderKind[] = ["ollama", "lmstudio", "local"];
@@ -140,6 +183,8 @@ export const emptySnapshot: Snapshot = {
   theme: "system",
   skillSources: ["anthropics/skills"],
   disabledSkills: [],
+  mcpServers: [],
+  accounts: {},
 };
 
 export const accessModeLabel: Record<AccessMode, { short: string; long: string }> = {

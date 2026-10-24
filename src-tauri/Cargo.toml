@@ -1,6 +1,6 @@
 [package]
 name = "agentos"
-version = "0.2.0"
+version = "0.3.0"
 description = "AgentOS desktop command center"
 authors = ["AgentOS"]
 edition = "2021"
@@ -22,4 +22,5 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 url = "2.5"
 keyring = { version = "3.6", features = ["apple-native"] }
 walkdir = "2.5"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "process", "io-util", "sync", "fs"] }
+sha1_smol = { version = "1", features = ["std"] }

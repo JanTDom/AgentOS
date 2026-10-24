@@ -836,3 +836,16 @@ pub fn backup_snapshot(app: tauri::AppHandle, label: String) -> Result<bool, Str
     fs::copy(&source, &target).map_err(|e| e.to_string())?;
     Ok(true)
 }
+
+/// Odczyt pliku JSON wskazanego przez użytkownika w oknie wyboru (np. konfiguracja MCP z Claude Desktop).
+#[tauri::command]
+pub fn read_user_json(path: String) -> Result<String, String> {
+    let p = PathBuf::from(&path);
+    if p.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("json")) != Some(true) {
+        return Err("Wybierz plik .json.".to_string());
+    }
+    if fs::metadata(&p).map(|m| m.len()).unwrap_or(0) > 1_000_000 {
+        return Err("Plik jest zbyt duży.".to_string());
+    }
+    fs::read_to_string(&p).map_err(|e| format!("Nie udało się odczytać pliku: {e}"))
+}

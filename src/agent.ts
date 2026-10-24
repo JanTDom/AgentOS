@@ -1,8 +1,9 @@
 // Pętla agenta: model ↔ narzędzia, z planem, zgodami, zatrzymaniem i cofaniem.
 import { api, type ToolSpec } from "./api";
 import { lineDiff } from "./diff";
+import { INTEGRATION_TOOLS, integrationPrompt, integrationTools, prepareMcp, runIntegrationTool, type Accounts, type McpBinding } from "./agentIntegrations";
 import { nowIso, uid } from "./store";
-import { skillToggleId, type AccessMode, type AgentMessage, type Change, type Conversation, type ConversationItem, type InstalledSkill, type PlanStep, type Project, type Provider, type ToolCall } from "./types";
+import { skillToggleId, type McpServer, type AccessMode, type AgentMessage, type Change, type Conversation, type ConversationItem, type InstalledSkill, type PlanStep, type Project, type Provider, type ToolCall } from "./types";
 
 const MAX_STEPS = 40;
 
@@ -11,7 +12,8 @@ export type Host = {
   project: (id: string | null) => Project | null;
   provider: (id: string) => Provider | undefined;
   update: (id: string, fn: (c: Conversation) => Conversation) => void;
-  settings: () => { skillSources: string[]; disabledSkills: string[] };
+  settings: () => { skillSources: string[]; disabledSkills: string[]; mcpServers: McpServer[]; accounts: Accounts };
+  saveProject: (id: string, patch: Partial<Project>) => void;
 };
 
 type Decision = { approved: boolean; feedback?: string; stopped?: boolean };
@@ -214,13 +216,15 @@ export class AgentRunner {
       const { disabledSkills } = this.host.settings();
       const skills = (await api.skillList(project?.path).catch(() => [] as InstalledSkill[]))
         .filter((skill) => !disabledSkills.includes(skillToggleId(skill, project?.id ?? null)));
-      const system = await systemPrompt(project, skills);
+      const { mcpServers, accounts } = this.host.settings();
+      const mcp = await prepareMcp(mcpServers, (text) => this.push(conversationId, { id: uid("item"), kind: "notice", text, at: nowIso() }));
+      const system = [await systemPrompt(project, skills), integrationPrompt(project, accounts, mcp)].filter(Boolean).join("\n\n");
       for (let step = 0; step < MAX_STEPS; step++) {
         if (this.stopRequests.has(conversationId)) return this.finishStopped(conversationId);
         const c = this.host.conversation(conversationId)!;
         const provider = this.host.provider(c.providerId);
         if (!provider) throw new Error("Wybrany model nie jest już dostępny. Wybierz inny model u góry rozmowy.");
-        const reply = await api.agentTurn(provider, c.model || provider.model, system, c.api, toolsFor(project, skills, c.toolsUnsupported));
+        const reply = await api.agentTurn(provider, c.model || provider.model, system, c.api, [...toolsFor(project, skills, c.toolsUnsupported), ...(c.toolsUnsupported ? [] : integrationTools(project, accounts, mcp))]);
         if (this.stopRequests.has(conversationId)) return this.finishStopped(conversationId);
         const assistant: AgentMessage = { role: "assistant", text: reply.text, toolCalls: reply.toolCalls };
         this.host.update(conversationId, (cur) => ({
@@ -241,7 +245,9 @@ export class AgentRunner {
         for (const call of reply.toolCalls) {
           const result = this.stopRequests.has(conversationId)
             ? { content: "Przerwano przez użytkownika.", isError: true }
-            : await this.execute(conversationId, project, call, warnings, skills);
+            : INTEGRATION_TOOLS.has(call.name) || mcp.has(call.name)
+              ? await this.executeIntegration(conversationId, project, call, mcp, warnings)
+              : await this.execute(conversationId, project, call, warnings, skills);
           this.host.update(conversationId, (cur) => ({
             ...cur,
             api: [...cur.api, { role: "tool", toolCallId: call.id, content: result.content, isError: result.isError }],
@@ -258,6 +264,40 @@ export class AgentRunner {
       this.active.delete(conversationId);
       this.stopRequests.delete(conversationId);
       this.onChange();
+    }
+  }
+
+  private async executeIntegration(conversationId: string, project: Project | null, call: ToolCall, mcp: Map<string, McpBinding>, warnings: string[]): Promise<{ content: string; isError: boolean }> {
+    const ctx = {
+      project,
+      accounts: this.host.settings().accounts,
+      action: (title: string) => {
+        const id = uid("item");
+        this.push(conversationId, { id, kind: "action", tool: call.name, title, status: "running", at: nowIso() });
+        return id;
+      },
+      finish: (id: string, ok: boolean, output: string) => {
+        this.patchItem(conversationId, id, { status: ok ? "done" : "failed", output: output.slice(0, 4000) } as Partial<ConversationItem>);
+        if (!ok) warnings.push(output.split("\n")[0].slice(0, 200));
+      },
+      progress: (id: string, title: string) => this.patchItem(conversationId, id, { title } as Partial<ConversationItem>),
+      approve: async (tool: string, title: string, detail: string, danger?: boolean) => {
+        const id = uid("item");
+        this.push(conversationId, { id, kind: "approval", tool, title, detail, danger, status: "pending", at: nowIso() });
+        const decision = await this.wait(conversationId, id);
+        this.patchItem(conversationId, id, { status: decision.approved ? "approved" : "rejected" } as Partial<ConversationItem>);
+        return decision;
+      },
+      notice: (text: string) => this.push(conversationId, { id: uid("item"), kind: "notice", text, at: nowIso() }),
+      stopped: () => this.stopRequests.has(conversationId),
+      saveProject: (patch: Partial<Project>) => { if (project) { this.host.saveProject(project.id, patch); Object.assign(project, patch); } },
+    };
+    try {
+      return await runIntegrationTool(ctx, call.name, call.input ?? {}, mcp);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.host.update(conversationId, (c) => ({ ...c, items: c.items.map((i) => (i.kind === "action" && i.status === "running" ? { ...i, status: "failed" as const, output: message } : i)) }));
+      return { content: `Błąd: ${message}`, isError: true };
     }
   }
 

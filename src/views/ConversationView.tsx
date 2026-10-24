@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, ChevronRight, CircleX, ExternalLink, FileEdit, FilePlus, FileText, FolderTree, Loader2, Puzzle, RotateCcw, Search, Terminal, Undo2, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, CircleX, ExternalLink, FileEdit, FilePlus, FileText, FolderTree, Loader2, Puzzle, GitBranch, UploadCloud, Rocket, Database, RotateCcw, Search, Terminal, Undo2, X } from "lucide-react";
 import { useApp } from "../context";
 import { Composer, DiffView, ModelPicker, StatusPill } from "../components";
 import { Markdown } from "../Markdown";
@@ -153,7 +153,12 @@ function Usage({ conversation }: { conversation: Conversation }) {
   );
 }
 
-const toolIcon: Record<string, typeof FileText> = { list_files: FolderTree, read_file: FileText, search_files: Search, run_command: Terminal, use_skill: Puzzle, read_skill_file: Puzzle, find_skills: Search, install_skill: Puzzle };
+const approveLabel: Record<string, string> = {
+  write_file: "Zapisz zmianę", run_command: "Uruchom", install_skill: "Zainstaluj", git_commit: "Zatwierdź zmiany", git_push: "Wypchnij",
+  github_pr: "Utwórz pull request", vercel_deploy: "Wdróż", supabase_sql: "Wykonaj w bazie", mcp: "Użyj narzędzia",
+};
+
+const toolIcon: Record<string, typeof FileText> = { list_files: FolderTree, read_file: FileText, search_files: Search, run_command: Terminal, use_skill: Puzzle, read_skill_file: Puzzle, find_skills: Search, install_skill: Puzzle, git_status: GitBranch, git_commit: GitBranch, git_branch: GitBranch, git_push: UploadCloud, github_create_pr: GitBranch, vercel_deploy: Rocket, vercel_logs: Rocket, supabase_schema: Database, supabase_sql: Database };
 
 function Item({ item, conversation }: { item: ConversationItem; conversation: Conversation }) {
   const { runner, snapshot, notify } = useApp();
@@ -209,12 +214,13 @@ function Item({ item, conversation }: { item: ConversationItem; conversation: Co
       const pending = item.status === "pending" && waitingHere;
       const long = (item.diff?.length ?? 0) > 24;
       return (
-        <div className={`card card-approval ${pending ? "card-attention" : ""}`}>
+        <div className={`card card-approval ${pending ? "card-attention" : ""} ${item.danger && pending ? "card-danger" : ""}`}>
+          {item.danger && pending && <div className="danger-note"><AlertTriangle size={13} /> Operacja publiczna albo trudna do cofnięcia — sprawdź szczegóły.</div>}
           <div className="card-kicker">{item.status === "pending" ? (pending ? "Wymaga Twojej zgody" : "Przerwano") : item.status === "approved" ? "Zatwierdzono" : "Odrzucono"}</div>
           <strong className="card-title">{item.title}</strong>
           {item.tool === "run_command"
             ? <pre className="command">{item.detail}</pre>
-            : item.tool === "install_skill" ? <div className="approval-detail">{item.detail}</div>
+            : item.tool !== "write_file" ? <div className="approval-detail">{item.detail}</div>
             : <span className="muted small">{item.detail}</span>}
           {item.diff && (
             <div className={`diff-wrap ${long && !expanded ? "clamped" : ""}`}>
@@ -224,7 +230,7 @@ function Item({ item, conversation }: { item: ConversationItem; conversation: Co
           )}
           {pending && (
             <div className="card-actions">
-              <button className="btn btn-primary" onClick={() => runner.decide(item.id, { approved: true })}><Check size={14} /> {item.tool === "run_command" ? "Uruchom" : item.tool === "install_skill" ? "Zainstaluj" : "Zapisz zmianę"}</button>
+              <button className={`btn ${item.danger ? "btn-danger-solid" : "btn-primary"}`} onClick={() => runner.decide(item.id, { approved: true })}><Check size={14} /> {approveLabel[item.tool] ?? "Zatwierdź"}</button>
               <button className="btn btn-ghost" onClick={() => runner.decide(item.id, { approved: false })}><X size={14} /> Odrzuć</button>
             </div>
           )}

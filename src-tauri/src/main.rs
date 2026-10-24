@@ -10,6 +10,8 @@ use walkdir::WalkDir;
 
 mod agent;
 mod skills;
+mod integrations;
+mod mcp;
 
 const KEYRING_SERVICE: &str = "pl.agentos.desktop";
 
@@ -922,6 +924,7 @@ pub fn run() {
             agent::create_project_folder,
             agent::open_in_system,
             agent::backup_snapshot,
+            agent::read_user_json,
             skills::skill_list,
             skills::skill_read,
             skills::skill_remove,
@@ -929,7 +932,32 @@ pub fn run() {
             skills::skill_inspect,
             skills::skill_preview,
             skills::skill_install,
-            skills::skill_import_local
+            skills::skill_import_local,
+            integrations::git_status,
+            integrations::git_init,
+            integrations::git_commit,
+            integrations::git_branch,
+            integrations::git_push,
+            integrations::git_clone,
+            integrations::github_user,
+            integrations::github_create_repo,
+            integrations::github_create_pr,
+            integrations::vercel_account,
+            integrations::vercel_projects,
+            integrations::vercel_deploy,
+            integrations::vercel_deployment,
+            integrations::vercel_deployments,
+            integrations::vercel_logs,
+            integrations::vercel_rollback,
+            integrations::vercel_set_env,
+            integrations::supabase_projects,
+            integrations::supabase_query,
+            integrations::supabase_keys,
+            integrations::supabase_types,
+            mcp::mcp_start,
+            mcp::mcp_call,
+            mcp::mcp_stop,
+            mcp::mcp_running
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgentOS");

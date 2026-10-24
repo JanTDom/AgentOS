@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { open, ask } from "@tauri-apps/plugin-dialog";
-import { Cpu, FolderPlus, Home, Loader2, Plus, Puzzle, Search, Settings, X } from "lucide-react";
+import { Cable, Cpu, FolderPlus, Home, Loader2, Plus, Puzzle, Search, Settings, X } from "lucide-react";
 import { AgentRunner } from "./agent";
 import { api, inDesktopApp } from "./api";
 import { AppContext, isUsable, useApp, type AppApi, type Tone } from "./context";
@@ -13,6 +13,7 @@ import { ConversationView } from "./views/ConversationView";
 import { ModelsView } from "./views/ModelsView";
 import { SettingsView } from "./views/SettingsView";
 import { SkillsView } from "./views/SkillsView";
+import { IntegrationsView } from "./views/IntegrationsView";
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>(emptySnapshot);
@@ -38,7 +39,8 @@ export default function App() {
           project: (id) => (id ? stateRef.current.projects.find((p) => p.id === id) ?? null : null),
           provider: (id) => stateRef.current.providers.find((p) => p.id === id),
           update: (id, fn) => mutate((s) => ({ ...s, conversations: s.conversations.map((c) => (c.id === id ? fn(c) : c)) })),
-          settings: () => ({ skillSources: stateRef.current.skillSources, disabledSkills: stateRef.current.disabledSkills }),
+          settings: () => ({ skillSources: stateRef.current.skillSources, disabledSkills: stateRef.current.disabledSkills, mcpServers: stateRef.current.mcpServers, accounts: stateRef.current.accounts }),
+          saveProject: (id, patch) => mutate((s) => ({ ...s, projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
         },
         () => setTick((t) => t + 1),
       ),
@@ -206,6 +208,7 @@ export default function App() {
           {route.screen === "conversation" && <ConversationView key={route.conversationId} conversationId={route.conversationId} />}
           {route.screen === "models" && <ModelsView />}
           {route.screen === "skills" && <SkillsView />}
+          {route.screen === "integrations" && <IntegrationsView />}
           {route.screen === "settings" && <SettingsView />}
         </main>
         {toast && (
@@ -277,6 +280,7 @@ function Sidebar({ onSearch }: { onSearch: () => void }) {
       )}
       <div className="side-bottom">
         <button className={`side-link ${isRoute("skills") ? "on" : ""}`} onClick={() => go({ screen: "skills" })}><Puzzle size={16} /> Umiejętności</button>
+        <button className={`side-link ${isRoute("integrations") ? "on" : ""}`} onClick={() => go({ screen: "integrations" })}><Cable size={16} /> Integracje</button>
         <button className={`side-link ${isRoute("models") ? "on" : ""}`} onClick={() => go({ screen: "models" })}><Cpu size={16} /> Modele</button>
         <button className={`side-link ${isRoute("settings") ? "on" : ""}`} onClick={() => go({ screen: "settings" })}><Settings size={16} /> Ustawienia</button>
       </div>
@@ -294,6 +298,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     ...snapshot.conversations.map((c) => ({ id: c.id, label: c.title, hint: snapshot.projects.find((p) => p.id === c.projectId)?.name ?? "Rozmowa", run: () => go({ screen: "conversation", conversationId: c.id }) })),
     { id: "go-models", label: "Modele", hint: "Ekran", run: () => go({ screen: "models" }) },
     { id: "go-skills", label: "Umiejętności", hint: "Ekran", run: () => go({ screen: "skills" }) },
+    { id: "go-integrations", label: "Integracje (GitHub, Vercel, Supabase, MCP)", hint: "Ekran", run: () => go({ screen: "integrations" }) },
     { id: "go-settings", label: "Ustawienia", hint: "Ekran", run: () => go({ screen: "settings" }) },
   ].filter((e) => !q || e.label.toLowerCase().includes(q) || e.hint.toLowerCase().includes(q)).slice(0, 12);
   const choose = (i: number) => { entries[i]?.run(); onClose(); };

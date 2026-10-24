@@ -1,6 +1,6 @@
 // Jedyne miejsce, w którym interfejs rozmawia z backendem Tauri.
 import { invoke } from "@tauri-apps/api/core";
-import type { AgentMessage, InstalledSkill, Provider, RemoteSkill, SkillPreview, SkillSearchResult, ToolCall } from "./types";
+import type { AgentMessage, GitStatus, InstalledSkill, McpServer, McpTool, Provider, RemoteSkill, SkillPreview, SkillSearchResult, ToolCall, VercelDeployment } from "./types";
 
 export const inDesktopApp = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -65,5 +65,38 @@ export const api = {
     call<InstalledSkill>("skill_install", { repo: skill.repo, gitRef: skill.gitRef, dir: skill.dir, scope, projectPath, overwrite }),
   skillImportLocal: (path: string, scope: "global" | "project", projectPath: string | null, overwrite: boolean) =>
     call<InstalledSkill[]>("skill_import_local", { path, scope, projectPath, overwrite }),
+  saveSecret: (id: string, value: string) =>
+    call<{ providerId: string; hasKey: boolean }>("save_provider", { provider: { id, name: id, kind: "custom", model: "", endpoint: "", hasKey: false, latency: "", tone: "cyan" }, apiKey: value }),
+  secretStatus: (ids: string[]) => call<Array<{ providerId: string; hasKey: boolean }>>("get_provider_key_statuses", { providerIds: ids }),
+  gitStatus: (projectPath: string) => call<GitStatus>("git_status", { projectPath }),
+  gitInit: (projectPath: string) => call<string>("git_init", { projectPath }),
+  gitCommit: (projectPath: string, message: string, allowSensitive = false, author?: { name: string; email: string }) =>
+    call<string>("git_commit", { projectPath, message, allowSensitive, authorName: author?.name ?? null, authorEmail: author?.email ?? null }),
+  gitBranch: (projectPath: string, name: string) => call<string>("git_branch", { projectPath, name }),
+  gitPush: (projectPath: string, allowProtected: boolean) => call<string>("git_push", { projectPath, allowProtected }),
+  gitClone: (url: string, parent: string) => call<string>("git_clone", { url, parent }),
+  githubUser: () => call<{ login: string; name: string; email: string }>("github_user"),
+  githubCreateRepo: (projectPath: string, name: string, priv: boolean) => call<string>("github_create_repo", { projectPath, name, private: priv, description: null }),
+  githubCreatePr: (projectPath: string, title: string, body: string) => call<string>("github_create_pr", { projectPath, title, body, base: null }),
+  vercelAccount: () => call<{ username: string; email: string; teams: Array<{ id: string; name: string; slug: string }> }>("vercel_account"),
+  vercelProjects: (teamId?: string | null) => call<Array<{ id: string; name: string; framework?: string | null }>>("vercel_projects", { teamId: teamId ?? null }),
+  vercelDeploy: (projectPath: string, name: string, projectId: string | undefined, teamId: string | null | undefined, production: boolean) =>
+    call<{ id: string; url?: string; readyState?: string; projectId?: string; files: number }>("vercel_deploy", { projectPath, name, projectId: projectId ?? null, teamId: teamId ?? null, production }),
+  vercelDeployment: (id: string, teamId?: string | null) => call<{ id: string; url?: string; readyState?: string; errorMessage?: string | null; target?: string | null; projectId?: string }>("vercel_deployment", { id, teamId: teamId ?? null }),
+  vercelDeployments: (projectId: string, teamId?: string | null) => call<VercelDeployment[]>("vercel_deployments", { projectId, teamId: teamId ?? null }),
+  vercelLogs: (id: string, teamId?: string | null) => call<string>("vercel_logs", { id, teamId: teamId ?? null }),
+  vercelRollback: (projectId: string, deploymentId: string, teamId?: string | null) => call<void>("vercel_rollback", { projectId, deploymentId, teamId: teamId ?? null }),
+  vercelSetEnv: (projectId: string, teamId: string | null | undefined, key: string, value: string, sensitive: boolean) =>
+    call<void>("vercel_set_env", { projectId, teamId: teamId ?? null, key, value, sensitive }),
+  supabaseProjects: () => call<Array<{ ref: string; name: string; region?: string; status?: string }>>("supabase_projects"),
+  supabaseQuery: (projectRef: string, sql: string, readOnly: boolean) => call<unknown>("supabase_query", { projectRef, sql, readOnly }),
+  supabaseKeys: (projectRef: string) => call<{ url: string; publicKey?: string | null }>("supabase_keys", { projectRef }),
+  supabaseTypes: (projectRef: string) => call<string>("supabase_types", { projectRef }),
+  mcpStart: (server: McpServer, restart = false) =>
+    call<McpTool[]>("mcp_start", { id: server.id, command: server.command, args: server.args, env: server.env, secretKeys: server.secretKeys, restart }),
+  mcpCall: (id: string, tool: string, args: unknown) => call<{ text: string; isError: boolean }>("mcp_call", { id, tool, arguments: args }),
+  mcpStop: (id: string) => call<void>("mcp_stop", { id }),
+  mcpRunning: () => call<string[]>("mcp_running"),
+  readUserJson: (path: string) => call<string>("read_user_json", { path }),
   openInSystem: (projectPath: string, mode: "finder" | "terminal" | "default", path?: string) => call<void>("open_in_system", { projectPath, path, mode }),
 };

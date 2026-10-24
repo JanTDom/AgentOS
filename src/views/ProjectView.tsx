@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Brain, File, FileEdit, FilePlus, Folder, FolderOpen, History, Loader2, MessageSquare, Plus, RotateCcw, Settings2, Terminal, Trash2, Undo2 } from "lucide-react";
+import { ArrowRight, Rocket, Brain, File, FileEdit, FilePlus, Folder, FolderOpen, History, Loader2, MessageSquare, Plus, RotateCcw, Settings2, Terminal, Trash2, Undo2 } from "lucide-react";
 import { api } from "../api";
 import { useApp, relativeTime } from "../context";
 import { Composer, DiffView, EmptyState, ModelPicker, StatusDot, StatusPill } from "../components";
 import { uid, nowIso } from "../store";
 import { accessModeLabel, type AccessMode, type Project, type Route } from "../types";
 import { useUndo } from "./useUndo";
+import { PublishTab } from "./PublishTab";
 
 type Tab = Extract<Route, { screen: "project" }>["tab"];
 
@@ -18,6 +19,7 @@ export function ProjectView({ projectId, tab }: { projectId: string; tab: Tab })
     ["chats", "Rozmowy", MessageSquare],
     ["files", "Pliki", Folder],
     ["changes", changeCount ? `Zmiany (${changeCount})` : "Zmiany", History],
+    ["publish", "Publikacja", Rocket],
     ["settings", "Ustawienia projektu", Settings2],
   ];
   const open = (mode: "finder" | "terminal") => api.openInSystem(project.path, mode).catch((e) => notify(String(e instanceof Error ? e.message : e), "bad"));
@@ -41,6 +43,7 @@ export function ProjectView({ projectId, tab }: { projectId: string; tab: Tab })
       {tab === "chats" && <ChatsTab project={project} />}
       {tab === "files" && <FilesTab project={project} />}
       {tab === "changes" && <ChangesTab project={project} />}
+      {tab === "publish" && <PublishTab project={project} />}
       {tab === "settings" && <SettingsTab project={project} />}
     </div>
   );
