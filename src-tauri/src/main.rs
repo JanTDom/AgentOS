@@ -8,6 +8,9 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use url::Url;
 use walkdir::WalkDir;
 
+mod agent;
+mod skills;
+
 const KEYRING_SERVICE: &str = "pl.agentos.desktop";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -879,8 +882,8 @@ pub fn run() {
             } else {
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("AgentOS")
-                    .inner_size(1440.0, 1024.0)
-                    .min_inner_size(1100.0, 740.0)
+                    .inner_size(1280.0, 840.0)
+                    .min_inner_size(760.0, 560.0)
                     .resizable(true)
                     .visible(true)
                     .build()
@@ -907,7 +910,26 @@ pub fn run() {
             get_provider_key_statuses,
             run_model,
             web_fetch,
-            computer_action
+            computer_action,
+            agent::agent_turn,
+            agent::list_models,
+            agent::fs_list,
+            agent::fs_read,
+            agent::fs_search,
+            agent::fs_write,
+            agent::change_undo,
+            agent::run_command,
+            agent::create_project_folder,
+            agent::open_in_system,
+            agent::backup_snapshot,
+            skills::skill_list,
+            skills::skill_read,
+            skills::skill_remove,
+            skills::skill_search,
+            skills::skill_inspect,
+            skills::skill_preview,
+            skills::skill_install,
+            skills::skill_import_local
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgentOS");

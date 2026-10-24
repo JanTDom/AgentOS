@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AgentOS",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "pl.agentos.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -15,10 +15,10 @@
         "label": "main",
         "title": "AgentOS",
         "visible": true,
-        "width": 1440,
-        "height": 1024,
-        "minWidth": 1100,
-        "minHeight": 740,
+        "width": 1280,
+        "height": 840,
+        "minWidth": 760,
+        "minHeight": 560,
         "resizable": true,
         "fullscreen": false
       }
@@ -29,11 +29,21 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
-    "icon": ["icons/32x32.png", "icons/64x64.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/64x64.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "category": "Productivity",
-    "shortDescription": "Command center dla agentów AI",
-    "longDescription": "AgentOS łączy projekty, modele, sieć, dowody i bezpieczne akcje systemowe w jednym lokalnym centrum pracy.",
+    "shortDescription": "Środowisko pracy z agentami AI",
+    "longDescription": "AgentOS łączy rozmowę z modelami AI, pracę na plikach projektu, plan, zatwierdzanie i cofanie zmian w jednej aplikacji na macOS.",
     "macOS": {
       "minimumSystemVersion": "10.15"
     }
