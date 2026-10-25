@@ -74,7 +74,10 @@ struct Blob {
 }
 
 fn now_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 // ---------- SKILL.md ----------
@@ -86,10 +89,16 @@ pub fn parse_frontmatter(text: &str) -> (HashMap<String, String>, String) {
         return (map, t.to_string());
     }
     let rest = &t[3..];
-    let Some(end) = rest.find("\n---") else { return (map, t.to_string()) };
+    let Some(end) = rest.find("\n---") else {
+        return (map, t.to_string());
+    };
     let header = &rest[..end];
     let after = &rest[end + 4..];
-    let body = after.split_once('\n').map(|(_, b)| b).unwrap_or("").to_string();
+    let body = after
+        .split_once('\n')
+        .map(|(_, b)| b)
+        .unwrap_or("")
+        .to_string();
     let mut current: Option<String> = None;
     for line in header.lines() {
         if line.trim().is_empty() {
@@ -122,34 +131,82 @@ pub fn parse_frontmatter(text: &str) -> (HashMap<String, String>, String) {
 fn is_script(path: &str) -> bool {
     let lower = path.to_lowercase();
     let ext = lower.rsplit('.').next().unwrap_or("");
-    matches!(ext, "sh" | "bash" | "zsh" | "py" | "js" | "mjs" | "cjs" | "ts" | "rb" | "pl" | "ps1" | "applescript" | "scpt" | "command" | "php" | "lua")
-        || lower.contains("/bin/")
+    matches!(
+        ext,
+        "sh" | "bash"
+            | "zsh"
+            | "py"
+            | "js"
+            | "mjs"
+            | "cjs"
+            | "ts"
+            | "rb"
+            | "pl"
+            | "ps1"
+            | "applescript"
+            | "scpt"
+            | "command"
+            | "php"
+            | "lua"
+    ) || lower.contains("/bin/")
 }
 
 fn safe_slug(raw: &str) -> String {
     let slug: String = raw
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c.to_ascii_lowercase() } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
         .collect();
     let slug = slug.trim_matches('-').to_string();
-    if slug.is_empty() { "skill".to_string() } else { slug.chars().take(64).collect() }
+    if slug.is_empty() {
+        "skill".to_string()
+    } else {
+        slug.chars().take(64).collect()
+    }
 }
 
 fn global_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("skills");
-    fs::create_dir_all(&dir).map_err(|e| format!("Nie można utworzyć folderu umiejętności: {e}"))?;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("skills");
+    fs::create_dir_all(&dir)
+        .map_err(|e| format!("Nie można utworzyć folderu umiejętności: {e}"))?;
     Ok(dir)
 }
 
-fn read_skill_dir(dir: &Path, scope: &str, location: &str, key: String, removable: bool) -> Option<InstalledSkill> {
-    let skill_md = ["SKILL.md", "skill.md", "Skill.md"].iter().map(|n| dir.join(n)).find(|p| p.is_file())?;
+fn read_skill_dir(
+    dir: &Path,
+    scope: &str,
+    location: &str,
+    key: String,
+    removable: bool,
+) -> Option<InstalledSkill> {
+    let skill_md = ["SKILL.md", "skill.md", "Skill.md"]
+        .iter()
+        .map(|n| dir.join(n))
+        .find(|p| p.is_file())?;
     let text = fs::read_to_string(&skill_md).ok()?;
     let (fm, _) = parse_frontmatter(&text);
-    let manifest: Option<Manifest> = fs::read(dir.join(MANIFEST)).ok().and_then(|b| serde_json::from_slice(&b).ok());
+    let manifest: Option<Manifest> = fs::read(dir.join(MANIFEST))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok());
     let slug = dir.file_name()?.to_string_lossy().to_string();
     let mut file_count = 0;
     let mut has_scripts = false;
-    for entry in WalkDir::new(dir).max_depth(6).into_iter().filter_map(Result::ok).filter(|e| e.file_type().is_file()).take(2000) {
+    for entry in WalkDir::new(dir)
+        .max_depth(6)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+        .take(2000)
+    {
         if entry.file_name() == MANIFEST {
             continue;
         }
@@ -161,7 +218,11 @@ fn read_skill_dir(dir: &Path, scope: &str, location: &str, key: String, removabl
     Some(InstalledSkill {
         key,
         scope: scope.to_string(),
-        name: fm.get("name").filter(|v| !v.is_empty()).cloned().unwrap_or_else(|| slug.clone()),
+        name: fm
+            .get("name")
+            .filter(|v| !v.is_empty())
+            .cloned()
+            .unwrap_or_else(|| slug.clone()),
         description: fm.get("description").cloned().unwrap_or_default(),
         slug,
         dir: dir.to_string_lossy().to_string(),
@@ -178,7 +239,18 @@ fn read_skill_dir(dir: &Path, scope: &str, location: &str, key: String, removabl
 
 fn child_dirs(base: &Path) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = fs::read_dir(base)
-        .map(|rd| rd.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.is_dir() && !p.file_name().map(|n| n.to_string_lossy().starts_with('.')).unwrap_or(true)).collect())
+        .map(|rd| {
+            rd.filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.is_dir()
+                        && !p
+                            .file_name()
+                            .map(|n| n.to_string_lossy().starts_with('.'))
+                            .unwrap_or(true)
+                })
+                .collect()
+        })
         .unwrap_or_default();
     dirs.sort();
     dirs
@@ -186,11 +258,16 @@ fn child_dirs(base: &Path) -> Vec<PathBuf> {
 
 /// Zainstalowane umiejętności: globalne i (jeśli podano) z folderu projektu.
 #[tauri::command]
-pub fn skill_list(app: tauri::AppHandle, project_path: Option<String>) -> Result<Vec<InstalledSkill>, String> {
+pub fn skill_list(
+    app: tauri::AppHandle,
+    project_path: Option<String>,
+) -> Result<Vec<InstalledSkill>, String> {
     let mut out = Vec::new();
     for dir in child_dirs(&global_dir(&app)?) {
         let slug = dir.file_name().unwrap().to_string_lossy().to_string();
-        if let Some(skill) = read_skill_dir(&dir, "global", "AgentOS", format!("global/{slug}"), true) {
+        if let Some(skill) =
+            read_skill_dir(&dir, "global", "AgentOS", format!("global/{slug}"), true)
+        {
             out.push(skill);
         }
     }
@@ -199,7 +276,13 @@ pub fn skill_list(app: tauri::AppHandle, project_path: Option<String>) -> Result
             for location in PROJECT_DIRS {
                 for dir in child_dirs(&root.join(location)) {
                     let slug = dir.file_name().unwrap().to_string_lossy().to_string();
-                    if let Some(skill) = read_skill_dir(&dir, "project", location, format!("{location}/{slug}"), *location == ".agentos/skills") {
+                    if let Some(skill) = read_skill_dir(
+                        &dir,
+                        "project",
+                        location,
+                        format!("{location}/{slug}"),
+                        *location == ".agentos/skills",
+                    ) {
                         out.push(skill);
                     }
                 }
@@ -209,8 +292,14 @@ pub fn skill_list(app: tauri::AppHandle, project_path: Option<String>) -> Result
     Ok(out)
 }
 
-fn resolve_key(app: &tauri::AppHandle, project_path: &Option<String>, key: &str) -> Result<PathBuf, String> {
-    let (prefix, slug) = key.rsplit_once('/').ok_or("Nieprawidłowy identyfikator umiejętności.")?;
+fn resolve_key(
+    app: &tauri::AppHandle,
+    project_path: &Option<String>,
+    key: &str,
+) -> Result<PathBuf, String> {
+    let (prefix, slug) = key
+        .rsplit_once('/')
+        .ok_or("Nieprawidłowy identyfikator umiejętności.")?;
     if slug.is_empty() || slug.starts_with('.') || slug.contains('\\') {
         return Err("Nieprawidłowa nazwa umiejętności.".to_string());
     }
@@ -220,8 +309,12 @@ fn resolve_key(app: &tauri::AppHandle, project_path: &Option<String>, key: &str)
     if !PROJECT_DIRS.contains(&prefix) {
         return Err("Nieznane położenie umiejętności.".to_string());
     }
-    let root = project_path.as_ref().filter(|p| !p.is_empty()).ok_or("Ta umiejętność należy do projektu, a rozmowa nie ma projektu.")?;
-    let root = fs::canonicalize(root).map_err(|_| "Folder projektu jest niedostępny.".to_string())?;
+    let root = project_path
+        .as_ref()
+        .filter(|p| !p.is_empty())
+        .ok_or("Ta umiejętność należy do projektu, a rozmowa nie ma projektu.")?;
+    let root =
+        fs::canonicalize(root).map_err(|_| "Folder projektu jest niedostępny.".to_string())?;
     Ok(root.join(prefix).join(slug))
 }
 
@@ -247,18 +340,30 @@ pub struct SkillContent {
 
 /// Treść SKILL.md (albo innego pliku umiejętności) i lista jej plików.
 #[tauri::command]
-pub fn skill_read(app: tauri::AppHandle, project_path: Option<String>, key: String, file: Option<String>) -> Result<SkillContent, String> {
+pub fn skill_read(
+    app: tauri::AppHandle,
+    project_path: Option<String>,
+    key: String,
+    file: Option<String>,
+) -> Result<SkillContent, String> {
     let dir = resolve_key(&app, &project_path, &key)?;
     if !dir.is_dir() {
         return Err("Ta umiejętność nie jest już zainstalowana.".to_string());
     }
     let target = match file.as_deref().filter(|f| !f.trim().is_empty()) {
         Some(f) => safe_join(&dir, f)?,
-        None => ["SKILL.md", "skill.md", "Skill.md"].iter().map(|n| dir.join(n)).find(|p| p.is_file()).ok_or("Brak pliku SKILL.md.")?,
+        None => ["SKILL.md", "skill.md", "Skill.md"]
+            .iter()
+            .map(|n| dir.join(n))
+            .find(|p| p.is_file())
+            .ok_or("Brak pliku SKILL.md.")?,
     };
-    let bytes = fs::read(&target).map_err(|_| "Nie ma takiego pliku w umiejętności.".to_string())?;
+    let bytes =
+        fs::read(&target).map_err(|_| "Nie ma takiego pliku w umiejętności.".to_string())?;
     if bytes.iter().take(8000).any(|b| *b == 0) {
-        return Err("To plik binarny — można go użyć poleceniem, ale nie odczytać jako tekst.".to_string());
+        return Err(
+            "To plik binarny — można go użyć poleceniem, ale nie odczytać jako tekst.".to_string(),
+        );
     }
     let mut content = String::from_utf8_lossy(&bytes).to_string();
     if content.chars().count() > 60_000 {
@@ -270,16 +375,33 @@ pub fn skill_read(app: tauri::AppHandle, project_path: Option<String>, key: Stri
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_file() && e.file_name() != MANIFEST)
         .take(300)
-        .map(|e| e.path().strip_prefix(&dir).unwrap_or(e.path()).to_string_lossy().to_string())
+        .map(|e| {
+            e.path()
+                .strip_prefix(&dir)
+                .unwrap_or(e.path())
+                .to_string_lossy()
+                .to_string()
+        })
         .collect();
-    Ok(SkillContent { dir: dir.to_string_lossy().to_string(), content, files })
+    Ok(SkillContent {
+        dir: dir.to_string_lossy().to_string(),
+        content,
+        files,
+    })
 }
 
 /// Usuwa umiejętność zainstalowaną przez AgentOS (globalnie lub w .agentos/skills).
 #[tauri::command]
-pub fn skill_remove(app: tauri::AppHandle, project_path: Option<String>, key: String) -> Result<(), String> {
+pub fn skill_remove(
+    app: tauri::AppHandle,
+    project_path: Option<String>,
+    key: String,
+) -> Result<(), String> {
     if !(key.starts_with("global/") || key.starts_with(".agentos/skills/")) {
-        return Err("Tę umiejętność dodano spoza AgentOS — usuń jej folder ręcznie albo ją wyłącz.".to_string());
+        return Err(
+            "Tę umiejętność dodano spoza AgentOS — usuń jej folder ręcznie albo ją wyłącz."
+                .to_string(),
+        );
     }
     let dir = resolve_key(&app, &project_path, &key)?;
     if dir.is_dir() {
@@ -311,13 +433,19 @@ fn net_err(e: reqwest::Error) -> String {
 }
 
 async fn gh_json(client: &Client, url: &Url) -> Result<Value, String> {
-    let mut req = client.get(url.clone()).header("accept", "application/vnd.github+json");
+    let mut req = client
+        .get(url.clone())
+        .header("accept", "application/vnd.github+json");
     if let Some(t) = token() {
         req = req.bearer_auth(t);
     }
     let resp = req.send().await.map_err(net_err)?;
     let status = resp.status();
-    let remaining = resp.headers().get("x-ratelimit-remaining").and_then(|v| v.to_str().ok()).map(str::to_string);
+    let remaining = resp
+        .headers()
+        .get("x-ratelimit-remaining")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
     let body: Value = resp.json().await.unwrap_or(Value::Null);
     if status.is_success() {
         return Ok(body);
@@ -339,7 +467,9 @@ fn api_url(path: &str) -> Url {
 fn raw_url(repo: &str, git_ref: &str, path: &str) -> Result<Url, String> {
     let mut u = Url::parse("https://raw.githubusercontent.com/").unwrap();
     {
-        let mut seg = u.path_segments_mut().map_err(|_| "Błędny adres.".to_string())?;
+        let mut seg = u
+            .path_segments_mut()
+            .map_err(|_| "Błędny adres.".to_string())?;
         seg.clear();
         for part in repo.split('/') {
             seg.push(part);
@@ -354,14 +484,22 @@ fn raw_url(repo: &str, git_ref: &str, path: &str) -> Result<Url, String> {
     Ok(u)
 }
 
-async fn raw_get(client: &Client, repo: &str, git_ref: &str, path: &str) -> Result<Vec<u8>, String> {
+async fn raw_get(
+    client: &Client,
+    repo: &str,
+    git_ref: &str,
+    path: &str,
+) -> Result<Vec<u8>, String> {
     let mut req = client.get(raw_url(repo, git_ref, path)?);
     if let Some(t) = token() {
         req = req.bearer_auth(t);
     }
     let resp = req.send().await.map_err(net_err)?;
     if !resp.status().is_success() {
-        return Err(format!("Nie udało się pobrać {path} ({}).", resp.status().as_u16()));
+        return Err(format!(
+            "Nie udało się pobrać {path} ({}).",
+            resp.status().as_u16()
+        ));
     }
     let bytes = resp.bytes().await.map_err(net_err)?;
     if bytes.len() as u64 > MAX_FILE_BYTES {
@@ -371,7 +509,8 @@ async fn raw_get(client: &Client, repo: &str, git_ref: &str, path: &str) -> Resu
 }
 
 fn tree_cache() -> &'static Mutex<HashMap<String, (Instant, String, Arc<Vec<Blob>>)>> {
-    static CACHE: OnceLock<Mutex<HashMap<String, (Instant, String, Arc<Vec<Blob>>)>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<HashMap<String, (Instant, String, Arc<Vec<Blob>>)>>> =
+        OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -380,7 +519,11 @@ fn md_cache() -> &'static Mutex<HashMap<String, String>> {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-async fn repo_tree(client: &Client, repo: &str, want_ref: Option<String>) -> Result<(String, Arc<Vec<Blob>>), String> {
+async fn repo_tree(
+    client: &Client,
+    repo: &str,
+    want_ref: Option<String>,
+) -> Result<(String, Arc<Vec<Blob>>), String> {
     let key = format!("{repo}@{}", want_ref.clone().unwrap_or_default());
     if let Some((at, r, b)) = tree_cache().lock().unwrap().get(&key).cloned() {
         if at.elapsed() < Duration::from_secs(600) {
@@ -391,64 +534,111 @@ async fn repo_tree(client: &Client, repo: &str, want_ref: Option<String>) -> Res
         Some(r) => r,
         None => {
             let info = gh_json(client, &api_url(&format!("repos/{repo}"))).await?;
-            info["default_branch"].as_str().unwrap_or("main").to_string()
+            info["default_branch"]
+                .as_str()
+                .unwrap_or("main")
+                .to_string()
         }
     };
-    let tree = gh_json(client, &api_url(&format!("repos/{repo}/git/trees/{git_ref}?recursive=1"))).await?;
+    let tree = gh_json(
+        client,
+        &api_url(&format!("repos/{repo}/git/trees/{git_ref}?recursive=1")),
+    )
+    .await?;
     let blobs: Vec<Blob> = tree["tree"]
         .as_array()
         .map(|items| {
             items
                 .iter()
                 .filter(|e| e["type"] == "blob")
-                .filter_map(|e| Some(Blob { path: e["path"].as_str()?.to_string(), size: e["size"].as_u64().unwrap_or(0) }))
+                .filter_map(|e| {
+                    Some(Blob {
+                        path: e["path"].as_str()?.to_string(),
+                        size: e["size"].as_u64().unwrap_or(0),
+                    })
+                })
                 .collect()
         })
         .unwrap_or_default();
     let blobs = Arc::new(blobs);
-    tree_cache().lock().unwrap().insert(key, (Instant::now(), git_ref.clone(), blobs.clone()));
+    tree_cache()
+        .lock()
+        .unwrap()
+        .insert(key, (Instant::now(), git_ref.clone(), blobs.clone()));
     Ok((git_ref, blobs))
 }
 
 fn valid_repo_part(part: &str) -> bool {
-    !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+    !part.is_empty()
+        && part
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
 }
 
 fn parent_dir(path: &str) -> String {
-    path.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default()
+    path.rsplit_once('/')
+        .map(|(d, _)| d.to_string())
+        .unwrap_or_default()
 }
 
 /// Adres GitHub (repozytorium, folder, plik SKILL.md, raw) albo „właściciel/repo”.
 pub fn parse_source(raw: &str) -> Result<(String, Option<String>, String), String> {
     let s = raw.trim().trim_end_matches('/');
-    let err = || "Podaj adres GitHub, np. https://github.com/właściciel/repo albo link do folderu z plikiem SKILL.md.".to_string();
-    let strip_skill = |p: String| if p.to_lowercase().ends_with("skill.md") { parent_dir(&p) } else { p };
-    let (repo, git_ref, path) = if let Some(rest) = s.strip_prefix("https://raw.githubusercontent.com/") {
-        let parts: Vec<&str> = rest.split('/').collect();
-        if parts.len() < 3 {
-            return Err(err());
-        }
-        (format!("{}/{}", parts[0], parts[1]), Some(parts[2].to_string()), strip_skill(parts[3..].join("/")))
-    } else if let Some(rest) = ["https://github.com/", "http://github.com/", "github.com/", "https://www.github.com/"].iter().find_map(|p| s.strip_prefix(p)) {
-        let parts: Vec<&str> = rest.split('/').collect();
-        if parts.len() < 2 {
-            return Err(err());
-        }
-        let repo = format!("{}/{}", parts[0], parts[1].trim_end_matches(".git"));
-        if parts.len() >= 4 && (parts[2] == "tree" || parts[2] == "blob") {
-            (repo, Some(parts[3].to_string()), strip_skill(parts[4..].join("/")))
-        } else {
-            (repo, None, String::new())
-        }
-    } else {
-        let parts: Vec<&str> = s.split('/').collect();
-        if parts.len() != 2 {
-            return Err(err());
-        }
-        (format!("{}/{}", parts[0], parts[1]), None, String::new())
+    let err = || {
+        "Podaj adres GitHub, np. https://github.com/właściciel/repo albo link do folderu z plikiem SKILL.md.".to_string()
     };
+    let strip_skill = |p: String| {
+        if p.to_lowercase().ends_with("skill.md") {
+            parent_dir(&p)
+        } else {
+            p
+        }
+    };
+    let (repo, git_ref, path) =
+        if let Some(rest) = s.strip_prefix("https://raw.githubusercontent.com/") {
+            let parts: Vec<&str> = rest.split('/').collect();
+            if parts.len() < 3 {
+                return Err(err());
+            }
+            (
+                format!("{}/{}", parts[0], parts[1]),
+                Some(parts[2].to_string()),
+                strip_skill(parts[3..].join("/")),
+            )
+        } else if let Some(rest) = [
+            "https://github.com/",
+            "http://github.com/",
+            "github.com/",
+            "https://www.github.com/",
+        ]
+        .iter()
+        .find_map(|p| s.strip_prefix(p))
+        {
+            let parts: Vec<&str> = rest.split('/').collect();
+            if parts.len() < 2 {
+                return Err(err());
+            }
+            let repo = format!("{}/{}", parts[0], parts[1].trim_end_matches(".git"));
+            if parts.len() >= 4 && (parts[2] == "tree" || parts[2] == "blob") {
+                (
+                    repo,
+                    Some(parts[3].to_string()),
+                    strip_skill(parts[4..].join("/")),
+                )
+            } else {
+                (repo, None, String::new())
+            }
+        } else {
+            let parts: Vec<&str> = s.split('/').collect();
+            if parts.len() != 2 {
+                return Err(err());
+            }
+            (format!("{}/{}", parts[0], parts[1]), None, String::new())
+        };
     let mut it = repo.split('/');
-    if !(it.next().map(valid_repo_part).unwrap_or(false) && it.next().map(valid_repo_part).unwrap_or(false)) {
+    if !(it.next().map(valid_repo_part).unwrap_or(false)
+        && it.next().map(valid_repo_part).unwrap_or(false))
+    {
         return Err(err());
     }
     Ok((repo, git_ref, path))
@@ -457,7 +647,13 @@ pub fn parse_source(raw: &str) -> Result<(String, Option<String>, String), Strin
 fn skill_dirs(blobs: &[Blob], sub: &str) -> Vec<String> {
     let mut dirs: Vec<String> = blobs
         .iter()
-        .filter(|b| b.path.rsplit('/').next().map(|n| n.eq_ignore_ascii_case("skill.md")).unwrap_or(false))
+        .filter(|b| {
+            b.path
+                .rsplit('/')
+                .next()
+                .map(|n| n.eq_ignore_ascii_case("skill.md"))
+                .unwrap_or(false)
+        })
         .map(|b| parent_dir(&b.path))
         .filter(|d| sub.is_empty() || d == sub || d.starts_with(&format!("{sub}/")))
         .filter(|d| !d.split('/').any(|p| p == "node_modules"))
@@ -469,17 +665,32 @@ fn skill_dirs(blobs: &[Blob], sub: &str) -> Vec<String> {
 }
 
 fn files_under<'a>(blobs: &'a [Blob], dir: &str) -> Vec<&'a Blob> {
-    blobs.iter().filter(|b| dir.is_empty() || b.path.starts_with(&format!("{dir}/"))).collect()
+    blobs
+        .iter()
+        .filter(|b| dir.is_empty() || b.path.starts_with(&format!("{dir}/")))
+        .collect()
 }
 
 fn skill_md_path(blobs: &[Blob], dir: &str) -> Option<String> {
     files_under(blobs, dir)
         .into_iter()
-        .find(|b| parent_dir(&b.path) == dir && b.path.rsplit('/').next().map(|n| n.eq_ignore_ascii_case("skill.md")).unwrap_or(false))
+        .find(|b| {
+            parent_dir(&b.path) == dir
+                && b.path
+                    .rsplit('/')
+                    .next()
+                    .map(|n| n.eq_ignore_ascii_case("skill.md"))
+                    .unwrap_or(false)
+        })
         .map(|b| b.path.clone())
 }
 
-async fn fetch_skill_md(client: &Client, repo: &str, git_ref: &str, path: &str) -> Result<String, String> {
+async fn fetch_skill_md(
+    client: &Client,
+    repo: &str,
+    git_ref: &str,
+    path: &str,
+) -> Result<String, String> {
     let key = format!("{repo}@{git_ref}:{path}");
     if let Some(text) = md_cache().lock().unwrap().get(&key).cloned() {
         return Ok(text);
@@ -489,15 +700,36 @@ async fn fetch_skill_md(client: &Client, repo: &str, git_ref: &str, path: &str) 
     Ok(text)
 }
 
-async fn build_remote(client: Client, repo: String, git_ref: String, dir: String, blobs: Arc<Vec<Blob>>, origin: String) -> Option<RemoteSkill> {
+async fn build_remote(
+    client: Client,
+    repo: String,
+    git_ref: String,
+    dir: String,
+    blobs: Arc<Vec<Blob>>,
+    origin: String,
+) -> Option<RemoteSkill> {
     let md_path = skill_md_path(&blobs, &dir)?;
-    let text = fetch_skill_md(&client, &repo, &git_ref, &md_path).await.ok()?;
+    let text = fetch_skill_md(&client, &repo, &git_ref, &md_path)
+        .await
+        .ok()?;
     let (fm, _) = parse_frontmatter(&text);
     let files = files_under(&blobs, &dir);
-    let fallback = if dir.is_empty() { repo.rsplit('/').next().unwrap_or("skill").to_string() } else { dir.rsplit('/').next().unwrap_or("skill").to_string() };
+    let fallback = if dir.is_empty() {
+        repo.rsplit('/').next().unwrap_or("skill").to_string()
+    } else {
+        dir.rsplit('/').next().unwrap_or("skill").to_string()
+    };
     Some(RemoteSkill {
-        url: if dir.is_empty() { format!("https://github.com/{repo}") } else { format!("https://github.com/{repo}/tree/{git_ref}/{dir}") },
-        name: fm.get("name").filter(|v| !v.is_empty()).cloned().unwrap_or(fallback),
+        url: if dir.is_empty() {
+            format!("https://github.com/{repo}")
+        } else {
+            format!("https://github.com/{repo}/tree/{git_ref}/{dir}")
+        },
+        name: fm
+            .get("name")
+            .filter(|v| !v.is_empty())
+            .cloned()
+            .unwrap_or(fallback),
         description: fm.get("description").cloned().unwrap_or_default(),
         file_count: files.len(),
         total_bytes: files.iter().map(|b| b.size).sum(),
@@ -509,10 +741,24 @@ async fn build_remote(client: Client, repo: String, git_ref: String, dir: String
     })
 }
 
-async fn build_many(client: &Client, repo: &str, git_ref: &str, dirs: Vec<String>, blobs: Arc<Vec<Blob>>, origin: &str) -> Vec<RemoteSkill> {
+async fn build_many(
+    client: &Client,
+    repo: &str,
+    git_ref: &str,
+    dirs: Vec<String>,
+    blobs: Arc<Vec<Blob>>,
+    origin: &str,
+) -> Vec<RemoteSkill> {
     let mut set = JoinSet::new();
     for dir in dirs.into_iter().take(150) {
-        set.spawn(build_remote(client.clone(), repo.to_string(), git_ref.to_string(), dir, blobs.clone(), origin.to_string()));
+        set.spawn(build_remote(
+            client.clone(),
+            repo.to_string(),
+            git_ref.to_string(),
+            dir,
+            blobs.clone(),
+            origin.to_string(),
+        ));
     }
     let mut out = Vec::new();
     while let Some(result) = set.join_next().await {
@@ -553,14 +799,25 @@ fn score(skill: &RemoteSkill, tokens: &[String]) -> usize {
 #[tauri::command]
 pub async fn skill_search(query: String, sources: Vec<String>) -> Result<SearchResult, String> {
     let client = client()?;
-    let tokens: Vec<String> = query.to_lowercase().split_whitespace().map(str::to_string).collect();
-    let mut result = SearchResult { catalog: vec![], community: vec![], repos: vec![], errors: vec![], used_token: token().is_some() };
+    let tokens: Vec<String> = query
+        .to_lowercase()
+        .split_whitespace()
+        .map(str::to_string)
+        .collect();
+    let mut result = SearchResult {
+        catalog: vec![],
+        community: vec![],
+        repos: vec![],
+        errors: vec![],
+        used_token: token().is_some(),
+    };
     for source in sources.iter().take(12) {
         match parse_source(source) {
             Ok((repo, want_ref, sub)) => match repo_tree(&client, &repo, want_ref).await {
                 Ok((git_ref, blobs)) => {
                     let dirs = skill_dirs(&blobs, &sub);
-                    let mut found = build_many(&client, &repo, &git_ref, dirs, blobs, "catalog").await;
+                    let mut found =
+                        build_many(&client, &repo, &git_ref, dirs, blobs, "catalog").await;
                     if !tokens.is_empty() {
                         found.retain(|s| score(s, &tokens) > 0);
                         found.sort_by_key(|s| std::cmp::Reverse(score(s, &tokens)));
@@ -575,16 +832,43 @@ pub async fn skill_search(query: String, sources: Vec<String>) -> Result<SearchR
     if tokens.is_empty() {
         return Ok(result);
     }
-    let known: HashSet<String> = result.catalog.iter().map(|s| format!("{}/{}", s.repo, s.dir)).collect();
+    let known: HashSet<String> = result
+        .catalog
+        .iter()
+        .map(|s| format!("{}/{}", s.repo, s.dir))
+        .collect();
     if result.used_token {
-        let url = Url::parse_with_params("https://api.github.com/search/code", &[("q", format!("{query} filename:SKILL.md")), ("per_page", "25".to_string())]).unwrap();
+        let url = Url::parse_with_params(
+            "https://api.github.com/search/code",
+            &[
+                ("q", format!("{query} filename:SKILL.md")),
+                ("per_page", "25".to_string()),
+            ],
+        )
+        .unwrap();
         match gh_json(&client, &url).await {
             Ok(body) => {
                 let mut set = JoinSet::new();
                 for item in body["items"].as_array().cloned().unwrap_or_default() {
-                    let Some(repo) = item.pointer("/repository/full_name").and_then(Value::as_str).map(str::to_string) else { continue };
-                    let Some(path) = item["path"].as_str().map(str::to_string) else { continue };
-                    let git_ref = item["url"].as_str().and_then(|u| Url::parse(u).ok()).and_then(|u| u.query_pairs().find(|(k, _)| k == "ref").map(|(_, v)| v.to_string())).unwrap_or_else(|| "HEAD".to_string());
+                    let Some(repo) = item
+                        .pointer("/repository/full_name")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                    else {
+                        continue;
+                    };
+                    let Some(path) = item["path"].as_str().map(str::to_string) else {
+                        continue;
+                    };
+                    let git_ref = item["url"]
+                        .as_str()
+                        .and_then(|u| Url::parse(u).ok())
+                        .and_then(|u| {
+                            u.query_pairs()
+                                .find(|(k, _)| k == "ref")
+                                .map(|(_, v)| v.to_string())
+                        })
+                        .unwrap_or_else(|| "HEAD".to_string());
                     let dir = parent_dir(&path);
                     if known.contains(&format!("{repo}/{dir}")) {
                         continue;
@@ -595,7 +879,13 @@ pub async fn skill_search(query: String, sources: Vec<String>) -> Result<SearchR
                         let (fm, _) = parse_frontmatter(&text);
                         Some(RemoteSkill {
                             url: format!("https://github.com/{repo}/blob/{git_ref}/{path}"),
-                            name: fm.get("name").filter(|v| !v.is_empty()).cloned().unwrap_or_else(|| dir.rsplit('/').next().unwrap_or("skill").to_string()),
+                            name: fm
+                                .get("name")
+                                .filter(|v| !v.is_empty())
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    dir.rsplit('/').next().unwrap_or("skill").to_string()
+                                }),
                             description: fm.get("description").cloned().unwrap_or_default(),
                             file_count: 0,
                             total_bytes: 0,
@@ -613,12 +903,19 @@ pub async fn skill_search(query: String, sources: Vec<String>) -> Result<SearchR
                     }
                 }
             }
-            Err(e) => result.errors.push(format!("Wyszukiwanie plików SKILL.md: {e}")),
+            Err(e) => result
+                .errors
+                .push(format!("Wyszukiwanie plików SKILL.md: {e}")),
         }
     }
     let url = Url::parse_with_params(
         "https://api.github.com/search/repositories",
-        &[("q", format!("{query} skill")), ("sort", "stars".to_string()), ("order", "desc".to_string()), ("per_page", "12".to_string())],
+        &[
+            ("q", format!("{query} skill")),
+            ("sort", "stars".to_string()),
+            ("order", "desc".to_string()),
+            ("per_page", "12".to_string()),
+        ],
     )
     .unwrap();
     match gh_json(&client, &url).await {
@@ -629,11 +926,18 @@ pub async fn skill_search(query: String, sources: Vec<String>) -> Result<SearchR
                     description: item["description"].as_str().unwrap_or_default().to_string(),
                     stars: item["stargazers_count"].as_u64().unwrap_or(0),
                     url: item["html_url"].as_str().unwrap_or_default().to_string(),
-                    updated: item["pushed_at"].as_str().unwrap_or_default().chars().take(10).collect(),
+                    updated: item["pushed_at"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .chars()
+                        .take(10)
+                        .collect(),
                 });
             }
         }
-        Err(e) => result.errors.push(format!("Wyszukiwanie repozytoriów: {e}")),
+        Err(e) => result
+            .errors
+            .push(format!("Wyszukiwanie repozytoriów: {e}")),
     }
     Ok(result)
 }
@@ -646,7 +950,9 @@ pub async fn skill_inspect(source: String) -> Result<Vec<RemoteSkill>, String> {
     let (git_ref, blobs) = repo_tree(&client, &repo, want_ref).await?;
     let dirs = skill_dirs(&blobs, &sub);
     if dirs.is_empty() {
-        return Err("Pod tym adresem nie ma pliku SKILL.md — to nie wygląda na umiejętność.".to_string());
+        return Err(
+            "Pod tym adresem nie ma pliku SKILL.md — to nie wygląda na umiejętność.".to_string(),
+        );
     }
     Ok(build_many(&client, &repo, &git_ref, dirs, blobs, "url").await)
 }
@@ -671,18 +977,47 @@ pub struct SkillPreview {
 
 const RISK_PATTERNS: &[(&[&str], &str)] = &[
     (&["curl ", "wget "], "pobiera dane z internetu"),
-    (&["| sh", "| bash", "|sh", "|bash", "| zsh"], "uruchamia pobrany kod w powłoce"),
+    (
+        &["| sh", "| bash", "|sh", "|bash", "| zsh"],
+        "uruchamia pobrany kod w powłoce",
+    ),
     (&["rm -rf", "rm -fr"], "usuwa pliki rekursywnie"),
     (&["sudo "], "wymaga uprawnień administratora"),
     (&["~/.ssh", ".ssh/id_"], "odwołuje się do kluczy SSH"),
-    (&["security find-", "keychain"], "odwołuje się do pęku kluczy macOS"),
-    (&["osascript", "tell application"], "steruje aplikacjami macOS"),
-    (&["base64 -d", "base64 --decode", "b64decode", "atob("], "dekoduje ukryte dane (base64)"),
-    (&["eval(", "exec(", "os.system(", "subprocess"], "uruchamia polecenia lub dynamiczny kod"),
-    (&["ignore previous instructions", "ignore all previous", "disregard previous", "zignoruj poprzednie"], "próbuje nadpisać instrukcje agenta"),
-    (&["launchctl", "crontab", "loginitems"], "instaluje zadania działające w tle"),
+    (
+        &["security find-", "keychain"],
+        "odwołuje się do pęku kluczy macOS",
+    ),
+    (
+        &["osascript", "tell application"],
+        "steruje aplikacjami macOS",
+    ),
+    (
+        &["base64 -d", "base64 --decode", "b64decode", "atob("],
+        "dekoduje ukryte dane (base64)",
+    ),
+    (
+        &["eval(", "exec(", "os.system(", "subprocess"],
+        "uruchamia polecenia lub dynamiczny kod",
+    ),
+    (
+        &[
+            "ignore previous instructions",
+            "ignore all previous",
+            "disregard previous",
+            "zignoruj poprzednie",
+        ],
+        "próbuje nadpisać instrukcje agenta",
+    ),
+    (
+        &["launchctl", "crontab", "loginitems"],
+        "instaluje zadania działające w tle",
+    ),
     (&["chmod +x", "chmod 777"], "zmienia uprawnienia plików"),
-    (&["api_key", "apikey", "access_token", "password"], "odwołuje się do kluczy lub haseł"),
+    (
+        &["api_key", "apikey", "access_token", "password"],
+        "odwołuje się do kluczy lub haseł",
+    ),
 ];
 
 fn scan_text(path: &str, text: &str, risks: &mut Vec<String>) {
@@ -699,20 +1034,35 @@ fn scan_text(path: &str, text: &str, risks: &mut Vec<String>) {
 
 /// Pełny podgląd jednej umiejętności przed instalacją: treść, pliki, ryzyka.
 #[tauri::command]
-pub async fn skill_preview(repo: String, git_ref: String, dir: String) -> Result<SkillPreview, String> {
+pub async fn skill_preview(
+    repo: String,
+    git_ref: String,
+    dir: String,
+) -> Result<SkillPreview, String> {
     let client = client()?;
     let (git_ref, blobs) = repo_tree(&client, &repo, Some(git_ref)).await?;
     let md_path = skill_md_path(&blobs, &dir).ok_or("W tym folderze nie ma pliku SKILL.md.")?;
-    let skill = build_remote(client.clone(), repo.clone(), git_ref.clone(), dir.clone(), blobs.clone(), "preview".to_string())
-        .await
-        .ok_or("Nie udało się odczytać SKILL.md.")?;
+    let skill = build_remote(
+        client.clone(),
+        repo.clone(),
+        git_ref.clone(),
+        dir.clone(),
+        blobs.clone(),
+        "preview".to_string(),
+    )
+    .await
+    .ok_or("Nie udało się odczytać SKILL.md.")?;
     let content = fetch_skill_md(&client, &repo, &git_ref, &md_path).await?;
     let files_all = files_under(&blobs, &dir);
     let total: u64 = files_all.iter().map(|b| b.size).sum();
     let blocked = if files_all.len() > MAX_FILES {
         Some(format!("Umiejętność ma {} plików (limit {MAX_FILES}). To raczej całe repozytorium niż pojedyncza umiejętność.", files_all.len()))
     } else if total > MAX_TOTAL_BYTES {
-        Some(format!("Umiejętność zajmuje {:.1} MB (limit {} MB).", total as f64 / 1e6, MAX_TOTAL_BYTES / 1024 / 1024))
+        Some(format!(
+            "Umiejętność zajmuje {:.1} MB (limit {} MB).",
+            total as f64 / 1e6,
+            MAX_TOTAL_BYTES / 1024 / 1024
+        ))
     } else if let Some(big) = files_all.iter().find(|b| b.size > MAX_FILE_BYTES) {
         Some(format!("Plik {} jest większy niż 5 MB.", big.path))
     } else {
@@ -721,12 +1071,30 @@ pub async fn skill_preview(repo: String, git_ref: String, dir: String) -> Result
     let mut risks = Vec::new();
     let strip = |p: &str| p.strip_prefix(&format!("{dir}/")).unwrap_or(p).to_string();
     scan_text(&strip(&md_path), &content, &mut risks);
-    let mut to_scan: Vec<&Blob> = files_all.iter().copied().filter(|b| b.path != md_path && b.size < 300_000 && (is_script(&b.path) || b.path.ends_with(".md") || b.path.ends_with(".txt"))).collect();
+    let mut to_scan: Vec<&Blob> = files_all
+        .iter()
+        .copied()
+        .filter(|b| {
+            b.path != md_path
+                && b.size < 300_000
+                && (is_script(&b.path) || b.path.ends_with(".md") || b.path.ends_with(".txt"))
+        })
+        .collect();
     to_scan.sort_by_key(|b| !is_script(&b.path));
     let mut set = JoinSet::new();
     for blob in to_scan.into_iter().take(30) {
-        let (client, repo, git_ref, path) = (client.clone(), repo.clone(), git_ref.clone(), blob.path.clone());
-        set.spawn(async move { raw_get(&client, &repo, &git_ref, &path).await.ok().map(|b| (path, String::from_utf8_lossy(&b).to_string())) });
+        let (client, repo, git_ref, path) = (
+            client.clone(),
+            repo.clone(),
+            git_ref.clone(),
+            blob.path.clone(),
+        );
+        set.spawn(async move {
+            raw_get(&client, &repo, &git_ref, &path)
+                .await
+                .ok()
+                .map(|b| (path, String::from_utf8_lossy(&b).to_string()))
+        });
     }
     while let Some(r) = set.join_next().await {
         if let Ok(Some((path, text))) = r {
@@ -734,16 +1102,37 @@ pub async fn skill_preview(repo: String, git_ref: String, dir: String) -> Result
         }
     }
     risks.truncate(40);
-    let files = files_all.iter().map(|b| PreviewFile { path: strip(&b.path), size: b.size, script: is_script(&b.path) }).collect();
-    Ok(SkillPreview { skill, content, files, risks, blocked })
+    let files = files_all
+        .iter()
+        .map(|b| PreviewFile {
+            path: strip(&b.path),
+            size: b.size,
+            script: is_script(&b.path),
+        })
+        .collect();
+    Ok(SkillPreview {
+        skill,
+        content,
+        files,
+        risks,
+        blocked,
+    })
 }
 
-fn target_base(app: &tauri::AppHandle, scope: &str, project_path: &Option<String>) -> Result<PathBuf, String> {
+fn target_base(
+    app: &tauri::AppHandle,
+    scope: &str,
+    project_path: &Option<String>,
+) -> Result<PathBuf, String> {
     if scope == "global" {
         return global_dir(app);
     }
-    let root = project_path.as_ref().filter(|p| !p.is_empty()).ok_or("Wybierz projekt, aby zainstalować w nim umiejętność.")?;
-    let root = fs::canonicalize(root).map_err(|_| "Folder projektu jest niedostępny.".to_string())?;
+    let root = project_path
+        .as_ref()
+        .filter(|p| !p.is_empty())
+        .ok_or("Wybierz projekt, aby zainstalować w nim umiejętność.")?;
+    let root =
+        fs::canonicalize(root).map_err(|_| "Folder projektu jest niedostępny.".to_string())?;
     let base = root.join(".agentos/skills");
     fs::create_dir_all(&base).map_err(|e| e.to_string())?;
     Ok(base)
@@ -755,7 +1144,8 @@ fn finish_install(staging: &Path, target: &Path, overwrite: bool) -> Result<(), 
             let _ = fs::remove_dir_all(staging);
             return Err("EXISTS: Umiejętność o tej nazwie jest już zainstalowana.".to_string());
         }
-        fs::remove_dir_all(target).map_err(|e| format!("Nie udało się zastąpić poprzedniej wersji: {e}"))?;
+        fs::remove_dir_all(target)
+            .map_err(|e| format!("Nie udało się zastąpić poprzedniej wersji: {e}"))?;
     }
     fs::rename(staging, target).map_err(|e| format!("Nie udało się zakończyć instalacji: {e}"))
 }
@@ -775,28 +1165,49 @@ pub async fn skill_install(
     let (git_ref, blobs) = repo_tree(&client, &repo, Some(git_ref)).await?;
     skill_md_path(&blobs, &dir).ok_or("W tym folderze nie ma pliku SKILL.md.")?;
     let files: Vec<Blob> = files_under(&blobs, &dir).into_iter().cloned().collect();
-    if files.len() > MAX_FILES || files.iter().map(|b| b.size).sum::<u64>() > MAX_TOTAL_BYTES || files.iter().any(|b| b.size > MAX_FILE_BYTES) {
+    if files.len() > MAX_FILES
+        || files.iter().map(|b| b.size).sum::<u64>() > MAX_TOTAL_BYTES
+        || files.iter().any(|b| b.size > MAX_FILE_BYTES)
+    {
         return Err("Umiejętność przekracza limity rozmiaru — instalacja wstrzymana.".to_string());
     }
     let base = target_base(&app, &scope, &project_path)?;
-    let slug = safe_slug(if dir.is_empty() { repo.rsplit('/').next().unwrap_or("skill") } else { dir.rsplit('/').next().unwrap_or("skill") });
+    let slug = safe_slug(if dir.is_empty() {
+        repo.rsplit('/').next().unwrap_or("skill")
+    } else {
+        dir.rsplit('/').next().unwrap_or("skill")
+    });
     let target = base.join(&slug);
     let staging = base.join(format!(".tmp-{slug}-{}", now_secs()));
     fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
     let mut set = JoinSet::new();
     for blob in files {
-        let rel = if dir.is_empty() { blob.path.clone() } else { blob.path.strip_prefix(&format!("{dir}/")).unwrap_or(&blob.path).to_string() };
+        let rel = if dir.is_empty() {
+            blob.path.clone()
+        } else {
+            blob.path
+                .strip_prefix(&format!("{dir}/"))
+                .unwrap_or(&blob.path)
+                .to_string()
+        };
         let (client, repo, git_ref) = (client.clone(), repo.clone(), git_ref.clone());
-        set.spawn(async move { raw_get(&client, &repo, &git_ref, &blob.path).await.map(|bytes| (rel, bytes)) });
+        set.spawn(async move {
+            raw_get(&client, &repo, &git_ref, &blob.path)
+                .await
+                .map(|bytes| (rel, bytes))
+        });
     }
     while let Some(result) = set.join_next().await {
-        let outcome = result.map_err(|e| e.to_string()).and_then(|r| r).and_then(|(rel, bytes)| {
-            let path = safe_join(&staging, &rel)?;
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            fs::write(&path, bytes).map_err(|e| e.to_string())
-        });
+        let outcome = result
+            .map_err(|e| e.to_string())
+            .and_then(|r| r)
+            .and_then(|(rel, bytes)| {
+                let path = safe_join(&staging, &rel)?;
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                }
+                fs::write(&path, bytes).map_err(|e| e.to_string())
+            });
         if let Err(e) = outcome {
             set.abort_all();
             let _ = fs::remove_dir_all(&staging);
@@ -804,34 +1215,75 @@ pub async fn skill_install(
         }
     }
     let manifest = Manifest {
-        source: if dir.is_empty() { format!("https://github.com/{repo}") } else { format!("https://github.com/{repo}/tree/{git_ref}/{dir}") },
+        source: if dir.is_empty() {
+            format!("https://github.com/{repo}")
+        } else {
+            format!("https://github.com/{repo}/tree/{git_ref}/{dir}")
+        },
         repo,
         git_ref,
         path: dir,
         installed_at: now_secs(),
     };
-    fs::write(staging.join(MANIFEST), serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    fs::write(
+        staging.join(MANIFEST),
+        serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
     finish_install(&staging, &target, overwrite)?;
-    let key = if scope == "global" { format!("global/{slug}") } else { format!(".agentos/skills/{slug}") };
-    read_skill_dir(&target, if scope == "global" { "global" } else { "project" }, if scope == "global" { "AgentOS" } else { ".agentos/skills" }, key, true)
-        .ok_or_else(|| "Zainstalowano, ale nie udało się odczytać SKILL.md.".to_string())
+    let key = if scope == "global" {
+        format!("global/{slug}")
+    } else {
+        format!(".agentos/skills/{slug}")
+    };
+    read_skill_dir(
+        &target,
+        if scope == "global" {
+            "global"
+        } else {
+            "project"
+        },
+        if scope == "global" {
+            "AgentOS"
+        } else {
+            ".agentos/skills"
+        },
+        key,
+        true,
+    )
+    .ok_or_else(|| "Zainstalowano, ale nie udało się odczytać SKILL.md.".to_string())
 }
 
 fn copy_skill_dir(source: &Path, staging: &Path) -> Result<(), String> {
     let mut count = 0usize;
     let mut total = 0u64;
-    let walker = WalkDir::new(source).follow_links(false).into_iter().filter_entry(|e| {
-        let name = e.file_name().to_string_lossy();
-        !(name == ".git" || name == "node_modules" || name == ".DS_Store" || name == "__pycache__")
-    });
-    for entry in walker.filter_map(Result::ok).filter(|e| e.file_type().is_file()) {
+    let walker = WalkDir::new(source)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            !(name == ".git"
+                || name == "node_modules"
+                || name == ".DS_Store"
+                || name == "__pycache__")
+        });
+    for entry in walker
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+    {
         let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
         count += 1;
         total += size;
         if count > MAX_FILES || total > MAX_TOTAL_BYTES || size > MAX_FILE_BYTES {
-            return Err(format!("Folder {} przekracza limity rozmiaru umiejętności.", source.display()));
+            return Err(format!(
+                "Folder {} przekracza limity rozmiaru umiejętności.",
+                source.display()
+            ));
         }
-        let rel = entry.path().strip_prefix(source).map_err(|e| e.to_string())?;
+        let rel = entry
+            .path()
+            .strip_prefix(source)
+            .map_err(|e| e.to_string())?;
         let dest = staging.join(rel);
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -843,18 +1295,41 @@ fn copy_skill_dir(source: &Path, staging: &Path) -> Result<(), String> {
 
 /// Importuje umiejętność (albo folder z wieloma umiejętnościami) z dysku.
 #[tauri::command]
-pub fn skill_import_local(app: tauri::AppHandle, path: String, scope: String, project_path: Option<String>, overwrite: bool) -> Result<Vec<InstalledSkill>, String> {
+pub fn skill_import_local(
+    app: tauri::AppHandle,
+    path: String,
+    scope: String,
+    project_path: Option<String>,
+    overwrite: bool,
+) -> Result<Vec<InstalledSkill>, String> {
     let source = fs::canonicalize(&path).map_err(|_| "Wybrany folder nie istnieje.".to_string())?;
-    let has_md = |p: &Path| ["SKILL.md", "skill.md", "Skill.md"].iter().any(|n| p.join(n).is_file());
-    let candidates: Vec<PathBuf> = if has_md(&source) { vec![source.clone()] } else { child_dirs(&source).into_iter().filter(|d| has_md(d)).collect() };
+    let has_md = |p: &Path| {
+        ["SKILL.md", "skill.md", "Skill.md"]
+            .iter()
+            .any(|n| p.join(n).is_file())
+    };
+    let candidates: Vec<PathBuf> = if has_md(&source) {
+        vec![source.clone()]
+    } else {
+        child_dirs(&source)
+            .into_iter()
+            .filter(|d| has_md(d))
+            .collect()
+    };
     if candidates.is_empty() {
-        return Err("W tym folderze nie ma pliku SKILL.md ani podfolderów z umiejętnościami.".to_string());
+        return Err(
+            "W tym folderze nie ma pliku SKILL.md ani podfolderów z umiejętnościami.".to_string(),
+        );
     }
     let base = target_base(&app, &scope, &project_path)?;
     let mut installed = Vec::new();
     let mut skipped = Vec::new();
     for dir in candidates.into_iter().take(100) {
-        let slug = safe_slug(&dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "skill".into()));
+        let slug = safe_slug(
+            &dir.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "skill".into()),
+        );
         let target = base.join(&slug);
         if target.exists() && !overwrite {
             skipped.push(slug);
@@ -865,16 +1340,46 @@ pub fn skill_import_local(app: tauri::AppHandle, path: String, scope: String, pr
             let _ = fs::remove_dir_all(&staging);
             return Err(e);
         }
-        let manifest = Manifest { source: format!("folder: {}", dir.display()), repo: String::new(), git_ref: String::new(), path: String::new(), installed_at: now_secs() };
-        let _ = fs::write(staging.join(MANIFEST), serde_json::to_vec_pretty(&manifest).unwrap_or_default());
+        let manifest = Manifest {
+            source: format!("folder: {}", dir.display()),
+            repo: String::new(),
+            git_ref: String::new(),
+            path: String::new(),
+            installed_at: now_secs(),
+        };
+        let _ = fs::write(
+            staging.join(MANIFEST),
+            serde_json::to_vec_pretty(&manifest).unwrap_or_default(),
+        );
         finish_install(&staging, &target, true)?;
-        let key = if scope == "global" { format!("global/{slug}") } else { format!(".agentos/skills/{slug}") };
-        if let Some(skill) = read_skill_dir(&target, if scope == "global" { "global" } else { "project" }, if scope == "global" { "AgentOS" } else { ".agentos/skills" }, key, true) {
+        let key = if scope == "global" {
+            format!("global/{slug}")
+        } else {
+            format!(".agentos/skills/{slug}")
+        };
+        if let Some(skill) = read_skill_dir(
+            &target,
+            if scope == "global" {
+                "global"
+            } else {
+                "project"
+            },
+            if scope == "global" {
+                "AgentOS"
+            } else {
+                ".agentos/skills"
+            },
+            key,
+            true,
+        ) {
             installed.push(skill);
         }
     }
     if installed.is_empty() && !skipped.is_empty() {
-        return Err(format!("EXISTS: Już zainstalowane: {}.", skipped.join(", ")));
+        return Err(format!(
+            "EXISTS: Już zainstalowane: {}.",
+            skipped.join(", ")
+        ));
     }
     Ok(installed)
 }
@@ -885,7 +1390,9 @@ mod tests {
 
     #[test]
     fn parses_frontmatter_with_folded_description() {
-        let (fm, body) = parse_frontmatter("---\nname: pdf\ndescription: >\n  Czyta i tworzy\n  pliki PDF\n---\n# Treść\n");
+        let (fm, body) = parse_frontmatter(
+            "---\nname: pdf\ndescription: >\n  Czyta i tworzy\n  pliki PDF\n---\n# Treść\n",
+        );
         assert_eq!(fm.get("name").unwrap(), "pdf");
         assert_eq!(fm.get("description").unwrap(), "Czyta i tworzy pliki PDF");
         assert!(body.starts_with("# Treść"));
@@ -893,12 +1400,20 @@ mod tests {
 
     #[test]
     fn parses_github_sources() {
-        assert_eq!(parse_source("anthropics/skills").unwrap(), ("anthropics/skills".into(), None, String::new()));
+        assert_eq!(
+            parse_source("anthropics/skills").unwrap(),
+            ("anthropics/skills".into(), None, String::new())
+        );
         let (repo, r, path) = parse_source("https://github.com/o/r/tree/main/skills/pdf").unwrap();
-        assert_eq!((repo.as_str(), r.as_deref(), path.as_str()), ("o/r", Some("main"), "skills/pdf"));
-        let (_, _, path) = parse_source("https://github.com/o/r/blob/main/skills/pdf/SKILL.md").unwrap();
+        assert_eq!(
+            (repo.as_str(), r.as_deref(), path.as_str()),
+            ("o/r", Some("main"), "skills/pdf")
+        );
+        let (_, _, path) =
+            parse_source("https://github.com/o/r/blob/main/skills/pdf/SKILL.md").unwrap();
         assert_eq!(path, "skills/pdf");
-        let (_, r, path) = parse_source("https://raw.githubusercontent.com/o/r/dev/a/SKILL.md").unwrap();
+        let (_, r, path) =
+            parse_source("https://raw.githubusercontent.com/o/r/dev/a/SKILL.md").unwrap();
         assert_eq!((r.as_deref(), path.as_str()), (Some("dev"), "a"));
         assert!(parse_source("https://example.com/x").is_err());
         assert!(parse_source("o/r; rm -rf").is_err());

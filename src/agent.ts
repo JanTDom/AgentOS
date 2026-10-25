@@ -12,7 +12,7 @@ export type Host = {
   project: (id: string | null) => Project | null;
   provider: (id: string) => Provider | undefined;
   update: (id: string, fn: (c: Conversation) => Conversation) => void;
-  settings: () => { skillSources: string[]; disabledSkills: string[]; mcpServers: McpServer[]; accounts: Accounts };
+  settings: () => { skillSources: string[]; disabledSkills: string[]; mcpServers: McpServer[]; accounts: Accounts; approveAll?: boolean };
   saveProject: (id: string, patch: Partial<Project>) => void;
 };
 
@@ -149,6 +149,7 @@ export class AgentRunner {
     for (const [itemId, wait] of this.waits) {
       if (wait.conversationId === conversationId) { wait.resolve({ approved: false, stopped: true }); this.waits.delete(itemId); }
     }
+    void api.cancelOperations();
     this.onChange();
   }
 
@@ -182,6 +183,10 @@ export class AgentRunner {
   }
 
   private wait(conversationId: string, itemId: string): Promise<Decision> {
+    // Zgoda na wszystko (Ustawienia): prośba zostaje w rozmowie jako zatwierdzona, agent nie czeka.
+    if (this.host.settings().approveAll && !this.stopRequests.has(conversationId)) {
+      return Promise.resolve({ approved: true });
+    }
     this.setStatus(conversationId, "waiting");
     return new Promise((resolve) => {
       this.waits.set(itemId, { conversationId, resolve });
@@ -384,7 +389,10 @@ export class AgentRunner {
           const content = str(input.content);
           let before = "";
           let exists = true;
-          try { before = await api.readFile(project.path, path); } catch { exists = false; }
+          // Skrót pobierany przed podglądem: zapis się nie uda, jeśli plik zmieni się w międzyczasie.
+          const expectedHash = await api.fileHash(project.path, path);
+          if (expectedHash === "missing") exists = false;
+          else { try { before = await api.readFile(project.path, path); } catch { /* treść nieczytelna — diff od zera */ } }
           const diff = lineDiff(before, content);
           if (project.accessMode === "ask") {
             const id = uid("item");
@@ -402,7 +410,7 @@ export class AgentRunner {
               return { content: `Użytkownik odrzucił zapis ${path}.${decision.feedback ? ` Uwagi: ${decision.feedback}` : ""} Nie ponawiaj tej zmiany bez pytania.`, isError: false };
             }
           }
-          const record = await api.writeFile(project.path, path, content, conversationId);
+          const record = await api.writeFile(project.path, path, content, conversationId, expectedHash);
           const change: Change = { id: record.id, conversationId, path: record.path, kind: record.kind, added: diff.added, removed: diff.removed, at: nowIso(), undone: false, preview: diff.lines.slice(0, 200) };
           this.host.update(conversationId, (c) => ({ ...c, changes: [...c.changes, change] }));
           this.push(conversationId, { id: uid("item"), kind: "change", changeId: record.id, path: record.path, change: record.kind, added: diff.added, removed: diff.removed, at: nowIso() });

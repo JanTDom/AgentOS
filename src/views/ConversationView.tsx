@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, ChevronRight, CircleX, ExternalLink, FileEdit, FilePlus, FileText, FolderTree, Loader2, Puzzle, GitBranch, UploadCloud, Rocket, Database, RotateCcw, Search, Terminal, Undo2, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, CircleX, ExternalLink, FileEdit, FilePlus, FileText, FolderTree, Loader2, Puzzle, GitBranch, UploadCloud, Rocket, Database, RotateCcw, Search, Terminal, Undo2, X, Trash2 } from "lucide-react";
 import { useApp } from "../context";
 import { Composer, DiffView, ModelPicker, StatusPill } from "../components";
 import { Markdown } from "../Markdown";
 import { accessModeLabel, isLocal, type Change, type Conversation, type ConversationItem } from "../types";
 import { useUndo } from "./useUndo";
 import { api } from "../api";
+import { trashChat } from "../chatTrash";
+import { flushSnapshot } from "../store";
 
 export function ConversationView({ conversationId }: { conversationId: string }) {
-  const { snapshot, go, runner, mutate } = useApp();
+  const { snapshot, go, runner, mutate, notify, confirmDialog } = useApp();
   const conversation = snapshot.conversations.find((c) => c.id === conversationId);
   const [text, setText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -56,9 +58,20 @@ export function ConversationView({ conversationId }: { conversationId: string })
           <h1 className="ellipsis">{conversation.title}</h1>
         </div>
         <div className="conv-meta">
-          {project && <span className="chip chip-static" title={accessModeLabel[project.accessMode].long}>{accessModeLabel[project.accessMode].short}</span>}
+          {project && (snapshot.approveAll && project.accessMode !== "read"
+            ? <span className="chip chip-static" title="Ustawienia → Zgoda na wszystko: agent nie czeka na zatwierdzenie.">Zgoda na wszystko</span>
+            : <span className="chip chip-static" title={accessModeLabel[project.accessMode].long}>{accessModeLabel[project.accessMode].short}</span>)}
           <ModelPicker compact providerId={conversation.providerId} model={conversation.model}
-            onChange={(providerId, model) => mutate((s) => ({ ...s, conversations: s.conversations.map((c) => (c.id === conversation.id ? { ...c, providerId, model, toolsUnsupported: false } : c)) }))} />
+            onChange={(providerId, model) => void (async () => {
+              const previous = snapshot.providers.find(p => p.id === conversation.providerId);
+              const next = snapshot.providers.find(p => p.id === providerId);
+              if (previous && next && isLocal(previous) && !isLocal(next) && conversation.api.length && !await confirmDialog(`Przełączyć na ${next.name}? Wcześniejsza historia rozmowy, wyniki narzędzi i odczytane fragmenty plików zostaną wysłane do tego dostawcy.`, 'Dane opuszczą Maca')) return;
+              mutate(s => ({ ...s, conversations: s.conversations.map(c => c.id === conversation.id ? { ...c, providerId, model, toolsUnsupported: false } : c) }));
+            })()} />
+          <button className="icon-btn" disabled={active} title={active ? "Najpierw zatrzymaj rozmowę" : "Przenieś czat do kosza"} aria-label="Usuń czat" onClick={() => void (async () => {
+            if (!await confirmDialog('Przenieść ten czat do kosza? Pliki projektu i wykonane operacje pozostaną bez zmian.', 'Usuń czat')) return;
+            try { mutate(s => trashChat(s, conversation.id, runner.isActive(conversation.id))); await flushSnapshot(); go({ screen: 'home' }); notify('Rozmowa przeniesiona do kosza.'); } catch (e) { notify(String(e), 'bad'); }
+          })()}><Trash2 size={14} /></button>
           <StatusPill status={conversation.status} stopping={runner.isStopping(conversation.id)} />
         </div>
       </header>

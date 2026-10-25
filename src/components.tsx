@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, ChevronDown, Cloud, HardDrive, Square } from "lucide-react";
+import { ArrowUp, ChevronDown, Cloud, HardDrive, Search, Square } from "lucide-react";
+import { formatTokens, modelName } from "./modelCatalog";
 import { useApp } from "./context";
 import { isLocal, statusLabel, type ConversationStatus, type DiffLine } from "./types";
 
@@ -26,6 +27,7 @@ export function EmptyState({ icon, title, text, children }: { icon?: ReactNode; 
 export function ModelPicker({ providerId, model, onChange, compact }: { providerId: string; model: string; onChange: (providerId: string, model: string) => void; compact?: boolean }) {
   const { snapshot, usableProviders, go } = useApp();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -33,26 +35,48 @@ export function ModelPicker({ providerId, model, onChange, compact }: { provider
     window.addEventListener("mousedown", close);
     return () => window.removeEventListener("mousedown", close);
   }, [open]);
+  useEffect(() => { if (!open) setQuery(""); }, [open]);
   const provider = snapshot.providers.find((p) => p.id === providerId);
   const local = provider ? isLocal(provider) : false;
+  const current = model || provider?.model || "";
+  const q = query.trim().toLowerCase();
+  const groups = usableProviders.map((p) => {
+    const base = p.models?.length ? p.models : [];
+    const ids = p.model && !base.includes(p.model) ? [p.model, ...base] : base;
+    const items = ids
+      .map((id) => ({ id, name: modelName(p, id), ctx: formatTokens(p.catalog?.find((m) => m.id === id)?.context) }))
+      .filter((m) => !q || m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
+    return { p, items };
+  });
+  const total = usableProviders.reduce((n, p) => n + (p.models?.length ?? 1), 0);
   return (
     <div className="picker" ref={ref}>
       <button className={`chip ${compact ? "chip-compact" : ""}`} onClick={() => setOpen((o) => !o)} title={local ? "Model lokalny — dane zostają na tym Macu" : "Model w chmurze — treść rozmowy i plików trafia do dostawcy"}>
         {local ? <HardDrive size={13} /> : <Cloud size={13} />}
-        <span className="ellipsis">{provider ? `${provider.name} · ${model || provider.model || "wybierz model"}` : "Wybierz model"}</span>
+        <span className="ellipsis">{provider ? `${provider.name} · ${current ? modelName(provider, current) : "wybierz model"}` : "Wybierz model"}</span>
         <ChevronDown size={13} />
       </button>
       {open && (
-        <div className="menu">
+        <div className="menu menu-models">
+          {total > 8 && (
+            <div className="menu-search">
+              <Search size={13} className="muted" />
+              <input autoFocus className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Szukaj modelu…" />
+            </div>
+          )}
           {usableProviders.length === 0 && <div className="menu-note">Brak gotowych modeli. <button className="link" onClick={() => go({ screen: "models" })}>Podłącz model</button></div>}
-          {usableProviders.map((p) => (
+          {groups.filter((g) => g.items.length > 0).map(({ p, items }) => (
             <div key={p.id} className="menu-group">
               <div className="menu-head">{isLocal(p) ? <HardDrive size={12} /> : <Cloud size={12} />} {p.name}<small>{isLocal(p) ? "na tym Macu" : "w chmurze"}</small></div>
-              {(p.models?.length ? p.models : [p.model]).slice(0, 12).map((m) => (
-                <button key={m} className={`menu-item ${p.id === providerId && m === model ? "on" : ""}`} onClick={() => { onChange(p.id, m); setOpen(false); }}>{m}</button>
+              {items.map((m) => (
+                <button key={m.id} className={`menu-item model-item ${p.id === providerId && m.id === current ? "on" : ""}`} title={m.id} onClick={() => { onChange(p.id, m.id); setOpen(false); }}>
+                  <span className="ellipsis">{m.name}</span>
+                  {m.ctx && <small className="muted">{m.ctx}</small>}
+                </button>
               ))}
             </div>
           ))}
+          {q && groups.every((g) => g.items.length === 0) && <div className="menu-note">Brak modelu pasującego do „{query}”.</div>}
           <button className="menu-item muted" onClick={() => go({ screen: "models" })}>Zarządzaj modelami…</button>
         </div>
       )}

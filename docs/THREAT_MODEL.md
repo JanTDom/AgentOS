@@ -1,48 +1,48 @@
-# AgentOS — model zagrożeń MVP
+# AgentOS — model zagrożeń 0.5
 
-Data: 22 października 2026 r.
+Data aktualizacji: 2026-10-24 (data środowiskowa, niezweryfikowana zewnętrznie).
 
-## Zakres i założenia
+## Aktywa i granice
 
-W zakresie są: aplikacja Tauri, frontend React, Rust backend, lokalne katalogi projektów, Keychain macOS, zewnętrzne endpointy modeli, fetch sieciowy oraz allowlista akcji macOS. MVP działa jako aplikacja lokalna dla jednego użytkownika; nie zakłada współdzielenia projektów ani publicznego serwera.
+Aktywa: klucze API, prywatne pliki, historia rozmów, repozytoria, bazy i wdrożenia. Granice zaufania: WebView ↔ Rust IPC, Rust ↔ folder projektu, Rust ↔ Keychain, model ↔ treść projektu, sieć publiczna, procesy terminala/MCP i usługi GitHub/Vercel/Supabase.
 
-Poza zakresem są: nieograniczone sterowanie myszą i klawiaturą, uruchamianie dowolnych poleceń powłoki z promptu, automatyczne publikowanie do produkcji, multi-tenancy i synchronizacja chmurowa.
+## Kontrole obecne
 
-## Aktywa
+- Polityka backendowa pośredniczy w komendach IPC; argumenty mutacji są zatwierdzane natywnie albo przez świadomie włączoną globalną zgodę.
+- Tryb tylko do odczytu jest sprawdzany także w backendzie dla operacji mających ścieżkę projektu.
+- Ścieżki i istniejący rodzice są kanonikalizowani; traversal i dowiązania poza root są blokowane.
+- Popularne pliki wrażliwe i sygnatury sekretów są blokowane przy odczycie, commitowaniu i publikacji.
+- Publiczny fetch sprawdza URL, DNS, adresy IP, przekierowania i limit treści. Lokalne modele wymagają dokładnego hosta loopback.
+- Zapisy plików używają hash wersji bazowej, unikalnego ID, kopii i atomowej podmiany.
+- Snapshot jest atomowy, walidowany i rotowany; błąd odczytu blokuje nadpisanie.
+- Stop wysyła sygnał anulowania do wspieranych żądań oraz zabija grupę procesu terminala.
+- Publikacja Vercel wymaga manifestu i ponownej kontroli plików.
 
-- klucze API i tokeny OAuth;
-- prywatne pliki projektów, dokumenty i kod źródłowy;
-- integralność repozytoriów i artefaktów;
-- zrzuty ekranu i wyniki fetchu sieciowego;
-- historia sesji oraz decyzji użytkownika;
-- dostępność zasobów CPU, sieci i modeli.
+## Istotne ograniczenia
 
-## Granice zaufania
+1. **Terminal i MCP nie są sandboxem.** Mogą czytać lub modyfikować dane poza projektem z uprawnieniami użytkownika.
+2. Globalna zgoda na wszystko zwiększa skutki przejęcia sesji. Włączenie wymaga natywnego potwierdzenia, ale użytkownik odpowiada za jej wyłączenie po zakończeniu pracy.
+3. MCP nie ma kryptograficznej tożsamości ani podpisów narzędzi. Skille są skanowane heurystycznie, nie podpisane.
+4. Log audytowy nie jest hash-chain ani przechowywany poza zapisywalnymi danymi aplikacji.
+5. Anulowanie nie gwarantuje cofnięcia żądania już przyjętego przez zewnętrzną usługę.
+6. Wykrywanie sekretów jest heurystyczne. Nietypowy sekret może przejść kontrolę.
+7. Historia i kopie są lokalne, lecz nie mają dodatkowego szyfrowania aplikacyjnego. Kosz nie jest trwałym wymazaniem.
+8. Endpointy dostawców niestandardowych są dopuszczane tylko przez HTTPS, ale zaufanie do samego dostawcy pozostaje decyzją użytkownika.
+9. Instalator bez Developer ID nie zapewnia tożsamości wydawcy ani notaryzacji.
 
-1. Frontend WebView ↔ Rust/Tauri IPC — frontend może zostać zmodyfikowany przez błąd UI lub złośliwy payload; komendy backendu muszą walidować argumenty niezależnie.
-2. Rust backend ↔ katalog projektu — ścieżki pochodzą z UI, więc muszą być sprawdzane i ograniczane do jawnie wybranego katalogu.
-3. Rust backend ↔ Keychain — klucze nie mogą wracać do snapshotu, logu ani odpowiedzi komendy.
-4. Rust backend ↔ sieć — URL jest wejściem użytkownika/agenta i może prowadzić do SSRF lub pobrania nadmiernej ilości danych.
-5. Rust backend ↔ macOS `open`/`screencapture` — akcje systemowe mają wpływ poza aplikacją i wymagają jawnego zatwierdzenia.
-6. Model zewnętrzny ↔ dane projektu — wysłanie kontekstu poza komputer jest decyzją prywatności, nie domyślnym skutkiem podłączenia modelu.
+## OWASP ASI — aktualny obraz
 
-## Priorytetowe scenariusze nadużyć
+- ASI-01 Prompt Injection: częściowo — instrukcje i deterministyczna polityka narzędzi, brak klasyfikatora treści.
+- ASI-02 Tool Use: częściowo — allowlista i walidacja, lecz terminal/MCP mają szeroki zakres.
+- ASI-03 Agency: częściowo — tryby projektu i limity kroków.
+- ASI-04 Escalation: częściowo — zmiana polityki wymaga natywnej zgody.
+- ASI-05 Trust Boundary: luka — brak podpisanej tożsamości agentów/MCP.
+- ASI-06 Logging: luka — brak odpornego na manipulację audytu.
+- ASI-07 Identity: luka — agenci mają identyfikatory logiczne, nie kryptograficzne.
+- ASI-08 Policy Bypass: częściowo — polityka w Rust, nadal potrzebne testy całego IPC.
+- ASI-09 Supply Chain: częściowo — limity i skan skilli, brak podpisów/SBOM.
+- ASI-10 Monitoring: częściowo — limit kroków i Stop, brak detekcji anomalii.
 
-| Priorytet | Scenariusz | Skutek | Kontrole MVP |
-| --- | --- | --- | --- |
-| wysoki | Prompt injection w pliku lub stronie przekonuje agenta do ujawnienia klucza | wyciek sekretu lub danych projektu | klucze poza frontendem, brak dowolnego shell, jawne uprawnienia |
-| wysoki | Złośliwy URL wykorzystuje fetch do dostępu do localhost/private network | odczyt usług lokalnych lub metadanych | tylko HTTP/HTTPS, blokada hostów lokalnych/prywatnych, limit redirectów |
-| wysoki | Błąd IPC pozwala wywołać akcję systemową bez zgody | otwarcie aplikacji, ujawnienie plików lub screenshot | allowlista akcji, parametr `approved`, walidacja backendowa |
-| średni | Nadmierny zakres projektu pozwala czytać niezamierzone katalogi | ujawnienie prywatnych plików | wybór katalogu przez użytkownika, ograniczenie przyszłych komend do project root |
-| średni | Odpowiedź modelu lub fetchu przeciąża pamięć | degradacja lub crash aplikacji | timeouty, limit 30k znaków, limit redirectów |
-| średni | Brak dowodu powoduje akceptację błędnej zmiany | regresja lub utrata zaufania | etap dowodów, diff, status testów, ręczna akceptacja |
+## Przed publiczną dystrybucją
 
-## Warunki przed rozszerzeniem zakresu
-
-- dodać testy ścieżek traversal, symlinków i repozytoriów poza rootem;
-- wprowadzić osobny, podpisany model polityki uprawnień per projekt i per sesja;
-- ograniczyć endpointy modeli allowlistą lub wymagać jawnego potwierdzenia dla nowej domeny;
-- redagować tokeny i dane w logach oraz artefaktach;
-- dodać event log odporny na modyfikacje oraz identyfikator decyzji użytkownika;
-- zaprojektować Accessibility automation jako osobny moduł z wizualnym wskaźnikiem, nagrywaniem działań i awaryjnym Stop;
-- przed dystrybucją wdrożyć code signing, notarization, aktualizacje i politykę prywatności.
+Podpis Developer ID, notaryzacja, automatyczne aktualizacje z podpisem, polityka prywatności, szyfrowanie historii, hash-chain audytu, izolacja terminala/MCP, podpisy skilli i pełne testy penetracyjne IPC/sieci.

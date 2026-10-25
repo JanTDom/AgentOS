@@ -5,7 +5,8 @@ import { AgentRunner } from "./agent";
 import { api, inDesktopApp } from "./api";
 import { AppContext, isUsable, useApp, type AppApi, type Tone } from "./context";
 import { loadSnapshot, nowIso, saveSnapshotSoon, uid } from "./store";
-import { emptySnapshot, isLocal, type Conversation, type Project, type Route, type Snapshot } from "./types";
+import { emptySnapshot, isLocal, type Conversation, type Project, type Provider, type Route, type Snapshot } from "./types";
+import { applyCatalog } from "./modelCatalog";
 import { StatusDot } from "./components";
 import { HomeView } from "./views/HomeView";
 import { ProjectView } from "./views/ProjectView";
@@ -39,7 +40,7 @@ export default function App() {
           project: (id) => (id ? stateRef.current.projects.find((p) => p.id === id) ?? null : null),
           provider: (id) => stateRef.current.providers.find((p) => p.id === id),
           update: (id, fn) => mutate((s) => ({ ...s, conversations: s.conversations.map((c) => (c.id === id ? fn(c) : c)) })),
-          settings: () => ({ skillSources: stateRef.current.skillSources, disabledSkills: stateRef.current.disabledSkills, mcpServers: stateRef.current.mcpServers, accounts: stateRef.current.accounts }),
+          settings: () => ({ skillSources: stateRef.current.skillSources, disabledSkills: stateRef.current.disabledSkills, mcpServers: stateRef.current.mcpServers, accounts: stateRef.current.accounts, approveAll: Boolean(stateRef.current.approveAll) }),
           saveProject: (id, patch) => mutate((s) => ({ ...s, projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
         },
         () => setTick((t) => t + 1),
@@ -57,11 +58,11 @@ export default function App() {
     await Promise.all(
       locals.map(async (provider) => {
         try {
-          const models = await api.listModels(provider);
+          const catalog = await api.listModels(provider);
           mutate((s) => ({
             ...s,
             providers: s.providers.map((p) => p.id === provider.id
-              ? { ...p, models, status: "ok", statusText: models.length ? `${models.length} modeli` : "działa, brak pobranych modeli", model: p.model && models.includes(p.model) ? p.model : models[0] ?? "" }
+              ? { ...p, ...applyCatalog(p, catalog), ...(catalog.length ? {} : { statusText: "działa, brak pobranych modeli" }) }
               : p),
           }));
         } catch {
@@ -82,11 +83,16 @@ export default function App() {
         const statuses = await api.keyStatuses(initial.providers.filter((p) => !isLocal(p)).map((p) => p.id));
         const byId = new Map(statuses.map((s) => [s.providerId, s.hasKey]));
         mutate((s) => ({ ...s, providers: s.providers.map((p) => (byId.has(p.id) ? { ...p, hasKey: byId.get(p.id)! } : p)) }));
-        for (const provider of stateRef.current.providers.filter((p) => !isLocal(p) && p.hasKey && !p.model)) {
-          void api.listModels(provider).then((models) => mutate((s) => ({
+        // Lista modeli w chmurze odświeżana przy starcie, jeśli jej brak albo ma ponad dobę.
+        const stale = (p: Provider) => !p.catalog?.length || !p.catalogAt || Date.now() - Date.parse(p.catalogAt) > 86_400_000;
+        for (const provider of stateRef.current.providers.filter((p) => !isLocal(p) && p.hasKey && stale(p))) {
+          void api.listModels(provider).then((catalog) => mutate((s) => ({
             ...s,
-            providers: s.providers.map((p) => (p.id === provider.id ? { ...p, models, model: p.model || models[0] || "" } : p)),
-          }))).catch(() => undefined);
+            providers: s.providers.map((p) => (p.id === provider.id ? { ...p, ...applyCatalog(p, catalog) } : p)),
+          }))).catch((e) => mutate((s) => ({
+            ...s,
+            providers: s.providers.map((p) => (p.id === provider.id ? { ...p, status: "error", statusText: e instanceof Error ? e.message : String(e) } : p)),
+          })));
         }
       } catch { /* Keychain niedostępny — pokażemy brak klucza */ }
       await refreshLocalModels();
@@ -117,7 +123,7 @@ export default function App() {
       createdAt: nowIso(),
       updatedAt: nowIso(),
       providerId: provider.id,
-      model: model ?? provider.model,
+      model: model ?? project?.model ?? provider.model,
       items: [],
       api: [],
       changes: [],

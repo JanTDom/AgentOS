@@ -196,7 +196,7 @@ function SettingsTab({ project }: { project: Project }) {
         <h3>Domyślny model projektu</h3>
         {usableProviders.length === 0
           ? <p className="muted small">Brak gotowych modeli. <button className="link" onClick={() => go({ screen: "models" })}>Podłącz model</button></p>
-          : <ModelPicker providerId={project.providerId ?? snapshot.defaultProviderId} model={usableProviders.find((p) => p.id === project.providerId)?.model ?? ""} onChange={(providerId) => update({ providerId })} />}
+          : <ModelPicker providerId={project.providerId ?? snapshot.defaultProviderId} model={project.model ?? usableProviders.find((p) => p.id === project.providerId)?.model ?? ""} onChange={(providerId, model) => update({ providerId, model })} />}
       </section>
       <section className="panel">
         <h3>Instrukcje dla agenta</h3>

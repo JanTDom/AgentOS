@@ -1,62 +1,48 @@
 # AgentOS
 
-AgentOS is a local-first macOS command center for AI agents. It combines project folders, model adapters, routing, network research, evidence, and bounded computer actions in one desktop workspace.
+AgentOS to lokalna aplikacja macOS do pracy z modelami AI nad folderami projektów. Łączy rozmowę, narzędzia plikowe, plan, jawne uprawnienia, cofanie zmian i integracje publikacyjne.
 
-## What works in this first vertical slice
+## Najważniejsze funkcje wersji 0.5
 
-- React/Vite desktop UI with a dark command-center workspace.
-- Tauri 2 packaging for macOS `.app` and `.dmg`.
-- Intel build target (`x86_64-apple-darwin`) on the current machine.
-- Project folder picker and project inspection through the Rust backend.
-- Provider adapters for OpenAI-compatible APIs, Anthropic-style Messages APIs, Google OpenAI-compatible endpoints and local Ollama.
-- Provider keys sent to macOS Keychain by the backend; keys are never put in the frontend snapshot.
-- Safe web fetch with HTTP/HTTPS validation, redirect limits, response-size cap, and private/local address blocking.
-- Bounded, approval-gated macOS actions: reveal a project in Finder, open Terminal at a project, open a web URL, and take a screenshot.
-- Demo fallback in a normal browser so the information architecture can be reviewed without Tauri.
+- modele lokalne (Ollama, LM Studio) i chmurowe;
+- klucze przechowywane w macOS Keychain;
+- plan i zgody w rozmowie oraz opcjonalna globalna „Zgoda na wszystko” potwierdzana natywnie;
+- wersjonowane zapisy plików z wykrywaniem konfliktów i cofnięciem;
+- Stop anulujący wspierane żądania modelu i grupy procesów terminala;
+- kosz starych czatów z przywracaniem (usunięcie czatu nie cofa zmian w projekcie);
+- ochrona ścieżek, dowiązań, plików wrażliwych i publicznych żądań sieciowych;
+- GitHub, Vercel, Supabase i lokalne serwery MCP.
+
+## Granice bezpieczeństwa
+
+Narzędzia plikowe są ograniczone do wybranego projektu. **Terminal i MCP nie są sandboxem** — procesy działają z uprawnieniami użytkownika i mogą oddziaływać poza projektem. Zgoda na wszystko nie wyłącza trybu „Tylko odczyt”. Cofnięcie obejmuje zapisy wykonane narzędziem plikowym, nie dowolne polecenia, commity, bazy danych ani operacje produkcyjne.
+
+Pliki `.env`, klucze prywatne i popularne pliki poświadczeń są blokowane w narzędziach odczytu oraz publikacji. Jest to ochrona warstwowa, nie gwarancja wykrycia każdego sekretu.
+
+Rozmowy, kosz i kopie snapshotu są lokalne, ale nie są dodatkowo szyfrowane przez AgentOS. Skasowanie czatu przenosi go do kosza; kopie bezpieczeństwa mogą nadal zawierać wcześniejszy stan.
 
 ## Development
 
 ```bash
-npm install
-npm run dev
-```
-
-For the desktop shell:
-
-```bash
+npm ci
+npm run build
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri:dev
 ```
 
-## macOS installers
+## Instalator Intel
 
-The current host is Intel, so the normal bundle creates an Intel installer:
-
-```bash
-npm run tauri:build
-```
-
-Output:
-
-- `src-tauri/target/release/bundle/macos/AgentOS.app`
-- `src-tauri/target/release/bundle/dmg/AgentOS_0.1.0_x64.dmg`
-
-To build an explicit Intel target:
+Na Macu Intel:
 
 ```bash
 npm run tauri:build:intel
 ```
 
-To build a universal binary later, install the missing Rust target and run:
+Artefakty powstają w `src-tauri/target/x86_64-apple-darwin/release/bundle/`. Dystrybucja publiczna wymaga własnego certyfikatu Apple Developer ID i notaryzacji; lokalny niepodpisany DMG może wymagać zezwolenia w Prywatność i ochrona.
 
-```bash
-rustup target add aarch64-apple-darwin
-npm run tauri:build:universal
-```
+## Dokumentacja
 
-Unsigned local builds may require allowing the app in macOS Privacy & Security. Production distribution still needs Apple code signing and notarization.
-
-## Security boundary
-
-AgentOS does not give an agent unrestricted mouse/keyboard control. Computer actions are explicit, allowlisted and approval-gated: opening/revealing project locations, activating a named application, bounded coordinate clicks, limited text entry and screenshots. Accessibility actions require the macOS permission and are kept separate from arbitrary script execution. The network backend blocks localhost and common private ranges and caps responses.
-
-See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the current boundary and open risks.
+- `docs/THREAT_MODEL.md` — granice i ryzyka;
+- `docs/UPGRADE_ACCEPTANCE.md` — kryteria aktualizacji 0.5;
+- `docs/ACCEPTANCE_MATRIX.md` — macierz funkcji i dowodów (aktualizowana wraz z wydaniem).

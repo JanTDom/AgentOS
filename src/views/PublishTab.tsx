@@ -271,7 +271,7 @@ function SupabasePanel({ project, setIntegrations }: { project: Project; setInte
               const types = await api.supabaseTypes(link.ref);
               const hasSrc = (await api.listFiles(project.path, "", 1).catch(() => [])).some((f) => f.path === "src" && f.kind === "dir");
               const target = hasSrc ? "src/lib/database.types.ts" : "database.types.ts";
-              await api.writeFile(project.path, target, types, `manual-${project.id}`);
+              await api.writeFile(project.path, target, types, `manual-${project.id}`, await api.fileHash(project.path, target));
               notify(`Zapisano typy bazy w ${target} (poprzednia wersja ma kopię zapasową).`);
             })}>Zapisz typy TypeScript</button>
             {vercel?.projectId && (

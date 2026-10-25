@@ -44,7 +44,7 @@ export function SkillsView() {
       <nav className="tabs">
         <button className={`tab ${tab === "installed" ? "on" : ""}`} onClick={() => setTab("installed")}><Puzzle size={14} /> Zainstalowane{installed ? ` (${installed.length})` : ""}</button>
         <button className={`tab ${tab === "find" ? "on" : ""}`} onClick={() => setTab("find")}><Search size={14} /> Znajdź</button>
-        <button className={`tab ${tab === "add" ? "on" : ""}`} onClick={() => setTab("add")}><Link2 size={14} /> Dodaj z adresu lub folderu</button>
+        <button className={`tab ${tab === "add" ? "on" : ""}`} onClick={() => setTab("add")}><Link2 size={14} /> Dodaj z linku</button>
       </nav>
       {tab === "installed" && <InstalledTab skills={installed} projectId={projectId} projectPath={project?.path ?? null} onChanged={reload} onFind={() => setTab("find")} />}
       {tab === "find" && <FindTab onPreview={setPreview} isInstalled={isInstalled} />}
@@ -252,7 +252,7 @@ function SourcesPanel() {
       <h3><KeyRound size={14} /> Token GitHub (opcjonalnie)</h3>
       <p className="muted small">Bez tokenu GitHub pozwala na ok. 60 zapytań na godzinę i nie przeszukuje treści plików. Token (bez żadnych uprawnień, typu „fine-grained, public repositories”) podnosi limit i włącza wyszukiwanie plików SKILL.md. Zapisywany w pęku kluczy macOS.</p>
       <div className="row">
-        <input className="input grow" type="password" value={tokenValue} onChange={(e) => setTokenValue(e.target.value)} placeholder="ghp_… lub github_pat_…" />
+        <input className="input grow" type="password" value={tokenValue} onChange={(e) => setTokenValue(e.target.value)} placeholder="Token GitHub (fine-grained albo classic)" />
         <button className="btn" disabled={!tokenValue.trim()} onClick={async () => {
           try { await api.saveProvider({ id: "github", name: "GitHub", kind: "custom", model: "", endpoint: "https://api.github.com", hasKey: false }, tokenValue.trim()); setTokenValue(""); notify("Token GitHub zapisany w pęku kluczy."); }
           catch (e) { notify(errText(e), "bad"); }

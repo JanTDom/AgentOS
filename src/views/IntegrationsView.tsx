@@ -84,7 +84,7 @@ function AccountCard({ service }: { service: (typeof SERVICES)[number] }) {
       </div>
       <div className="row">
         <button className="link small" onClick={() => setShowHelp((h) => !h)}>{showHelp ? "Ukryj instrukcję" : "Jak zdobyć token?"}</button>
-        {account && <button className="btn btn-ghost btn-xs" onClick={() => mutate((s) => ({ ...s, accounts: { ...s.accounts, [service.id]: undefined } }))}>Odłącz w AgentOS</button>}
+        {account && <button className="btn btn-ghost btn-xs" disabled={busy} onClick={async () => { setBusy(true); try { await api.deleteSecret(service.id); mutate((s) => ({ ...s, accounts: { ...s.accounts, [service.id]: undefined } })); notify(`${service.name}: token usunięty z Keychain.`); } catch (e) { notify(errText(e), "bad"); } finally { setBusy(false); } }}>Usuń token i odłącz</button>}
       </div>
       {showHelp && <ol className="steps-hint">{service.steps.map((s) => <li key={s}>{s}</li>)}</ol>}
     </article>
@@ -166,7 +166,7 @@ function McpSection() {
           <button className="btn" onClick={() => setAdding((a) => !a)}><Plus size={14} /> Dodaj serwer</button>
         </div>
       </div>
-      <p className="muted small">Serwery MCP dają agentowi dodatkowe narzędzia (np. bazy danych, kalendarz, przeglądarka). Uruchamiane lokalnie (stdio), np. przez npx lub uvx. Każde użycie narzędzia wymaga Twojej zgody, chyba że oznaczysz serwer jako zaufany.</p>
+      <p className="muted small">Serwery MCP dają agentowi dodatkowe narzędzia (np. bazy danych, kalendarz, przeglądarka). Uruchamiane lokalnie (stdio), np. przez npx lub uvx. MCP uruchamia proces z uprawnieniami użytkownika i nie jest sandboxem. Każde użycie wymaga zgody, chyba że świadomie włączysz tryb zaufany lub globalną zgodę na wszystko.</p>
       {adding && <McpForm onDone={() => setAdding(false)} />}
       {snapshot.mcpServers.length === 0 && !adding
         ? <EmptyState icon={<Plug size={18} />} title="Brak serwerów MCP" text="Dodaj serwer ręcznie albo zaimportuj konfigurację z Claude Desktop." />

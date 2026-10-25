@@ -1,10 +1,9 @@
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import App from "./App";
-import "./styles.css";
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App';
+import { BackendControls, RecoveryBoundary, SaveIndicator } from './PersistenceUI';
+import './styles.css';
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+createRoot(document.getElementById('root')!).render(
+  <StrictMode><RecoveryBoundary /><App /><SaveIndicator /><BackendControls /></StrictMode>,
 );

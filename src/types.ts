@@ -9,9 +9,31 @@ export type Provider = {
   model: string;
   endpoint: string;
   hasKey: boolean;
+  /** Identyfikatory modeli do rozmów (bez embeddingów, obrazów, mowy). */
   models?: string[];
+  /** Pełna lista od dostawcy z opisem — tylko dane zwrócone przez dostawcę. */
+  catalog?: ModelInfo[];
+  /** Kiedy ostatnio pobrano listę (ISO). */
+  catalogAt?: string;
   status?: "unknown" | "ok" | "offline" | "error";
   statusText?: string;
+};
+
+export type ModelCategory = "chat" | "embedding" | "image" | "audio" | "other";
+
+export type ModelInfo = {
+  id: string;
+  name: string;
+  category: ModelCategory;
+  context?: number | null;
+  maxOutput?: number | null;
+  /** USD za 1 mln tokenów — tylko gdy dostawca podaje cenę. */
+  inputPrice?: number | null;
+  outputPrice?: number | null;
+  created?: number | null;
+  vision?: boolean | null;
+  loaded?: boolean | null;
+  size?: string | null;
 };
 
 /** Ile agent może zrobić bez pytania. */
@@ -28,6 +50,7 @@ export type Project = {
   memory: MemoryNote[];
   accessMode: AccessMode;
   providerId?: string;
+  model?: string;
   contextFiles?: string[];
   integrations?: ProjectIntegrations;
 };
@@ -124,6 +147,7 @@ export type Snapshot = {
   version: 4;
   projects: Project[];
   conversations: Conversation[];
+  trash?: Array<{ conversation: Conversation; deletedAt: string }>;
   providers: Provider[];
   defaultProviderId: string;
   defaultAccessMode: AccessMode;
@@ -135,6 +159,8 @@ export type Snapshot = {
   mcpServers: McpServer[];
   /** Połączone konta (nazwa użytkownika) — ustawiane po sprawdzeniu tokenu. */
   accounts: { github?: string; vercel?: string; supabase?: string };
+  /** Zgoda na wszystko: każda prośba agenta o zgodę jest zatwierdzana automatycznie. */
+  approveAll?: boolean;
 };
 
 export type GitStatus = {
@@ -185,6 +211,7 @@ export const emptySnapshot: Snapshot = {
   disabledSkills: [],
   mcpServers: [],
   accounts: {},
+  approveAll: false,
 };
 
 export const accessModeLabel: Record<AccessMode, { short: string; long: string }> = {
