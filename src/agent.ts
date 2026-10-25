@@ -3,7 +3,8 @@ import { api, type ToolSpec } from "./api";
 import { lineDiff } from "./diff";
 import { INTEGRATION_TOOLS, integrationPrompt, integrationTools, prepareMcp, runIntegrationTool, type Accounts, type McpBinding } from "./agentIntegrations";
 import { nowIso, uid } from "./store";
-import { skillToggleId, type McpServer, type AccessMode, type AgentMessage, type Change, type Conversation, type ConversationItem, type InstalledSkill, type PlanStep, type Project, type Provider, type ToolCall } from "./types";
+import { enabledSkills, formatSkillMatches, resolveSkill, searchInstalledSkills, skillsSection } from "./skillsCatalog";
+import { type McpServer, type AccessMode, type AgentMessage, type Change, type Conversation, type ConversationItem, type InstalledSkill, type PlanStep, type Project, type Provider, type ToolCall } from "./types";
 
 const MAX_STEPS = 40;
 
@@ -59,6 +60,7 @@ const TOOLS: Record<string, ToolSpec> = {
     description: "Odczytuje dodatkowy plik umiejętności (np. reference.md, szablon), wskazany w jej instrukcjach.",
     parameters: { type: "object", properties: { name: { type: "string" }, path: { type: "string", description: "Ścieżka względem folderu umiejętności" } }, required: ["name", "path"] },
   },
+  search_installed_skills: { name: "search_installed_skills", description: "Przeszukuje wszystkie włączone lokalne skille po nazwie, identyfikatorze i opisie. Puste query zwraca wszystkie; bez internetu.", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } },
   find_skills: {
     name: "find_skills",
     description: "Szuka gotowych umiejętności (SKILL.md) w katalogu i na GitHubie. Użyj, gdy zadanie wymaga specjalistycznej wiedzy lub formatu (np. PDF, XLSX, analiza umów), a żadna zainstalowana umiejętność nie pasuje.",
@@ -78,18 +80,10 @@ const TOOLS: Record<string, ToolSpec> = {
 
 function toolsFor(project: Project | null, skills: InstalledSkill[], toolsUnsupported?: boolean): ToolSpec[] {
   if (toolsUnsupported) return [];
-  const skillTools = [...(skills.length ? [TOOLS.use_skill, TOOLS.read_skill_file] : []), TOOLS.find_skills];
+  const skillTools = [...(skills.length ? [TOOLS.use_skill, TOOLS.read_skill_file, TOOLS.search_installed_skills] : []), TOOLS.find_skills];
   if (!project) return [...skillTools, TOOLS.install_skill];
   const base = [TOOLS.list_files, TOOLS.read_file, TOOLS.search_files, TOOLS.propose_plan, TOOLS.mark_step, ...skillTools];
   return project.accessMode === "read" ? base : [...base, TOOLS.install_skill, TOOLS.write_file, TOOLS.run_command];
-}
-
-function skillsSection(skills: InstalledSkill[]): string {
-  if (!skills.length) return "Nie masz zainstalowanych umiejętności. Jeśli zadanie wymaga specjalistycznej wiedzy lub formatu, możesz poszukać umiejętności narzędziem find_skills.";
-  return [
-    "Zainstalowane umiejętności (gotowe instrukcje do konkretnej pracy). Gdy zadanie pasuje do opisu, najpierw wywołaj use_skill i postępuj według jej instrukcji:",
-    ...skills.slice(0, 60).map((skill) => `- ${skill.name}: ${skill.description.slice(0, 300) || "(bez opisu)"}`),
-  ].join("\n");
 }
 
 const accessText: Record<AccessMode, string> = {
@@ -219,8 +213,7 @@ export class AgentRunner {
       const first = this.host.conversation(conversationId)!;
       const project = this.host.project(first.projectId);
       const { disabledSkills } = this.host.settings();
-      const skills = (await api.skillList(project?.path).catch(() => [] as InstalledSkill[]))
-        .filter((skill) => !disabledSkills.includes(skillToggleId(skill, project?.id ?? null)));
+      const skills = enabledSkills(await api.skillList(project?.path).catch(() => [] as InstalledSkill[]), disabledSkills, project?.id ?? null);
       const { mcpServers, accounts } = this.host.settings();
       const mcp = await prepareMcp(mcpServers, (text) => this.push(conversationId, { id: uid("item"), kind: "notice", text, at: nowIso() }));
       const system = [await systemPrompt(project, skills), integrationPrompt(project, accounts, mcp)].filter(Boolean).join("\n\n");
@@ -313,12 +306,9 @@ export class AgentRunner {
 
   private async execute(conversationId: string, project: Project | null, call: ToolCall, warnings: string[], skills: InstalledSkill[]): Promise<{ content: string; isError: boolean }> {
     const input = call.input ?? {};
-    const skillTool = ["use_skill", "read_skill_file", "find_skills", "install_skill"].includes(call.name);
+    const skillTool = ["use_skill", "read_skill_file", "search_installed_skills", "find_skills", "install_skill"].includes(call.name);
     if (!project && !skillTool) return { content: "Brak projektu — narzędzia plikowe są niedostępne.", isError: true };
-    const findSkill = (name: string) => {
-      const n = name.trim().toLowerCase();
-      return skills.find((s) => s.name.toLowerCase() === n) ?? skills.find((s) => s.slug === n) ?? skills.find((s) => s.name.toLowerCase().includes(n));
-    };
+    const findSkill = (name: string) => resolveSkill(skills, name);
     const action = (title: string) => {
       const id = uid("item");
       this.push(conversationId, { id, kind: "action", tool: call.name, title, status: "running", at: nowIso() });
@@ -460,6 +450,12 @@ export interface AgentRunner {
 AgentRunner.prototype.executeSkill = async function (this: AgentRunner, conversationId, project, name, input, skills, findSkill, action, finish) {
   const self = this as unknown as { push: (id: string, item: ConversationItem) => void; patchItem: (c: string, i: string, p: Partial<ConversationItem>) => void; wait: (c: string, i: string) => Promise<Decision>; host: Host };
   switch (name) {
+    case "search_installed_skills": {
+      const query = str(input.query), matches = searchInstalledSkills(skills, query);
+      const id = action(query ? `Przeszukuje lokalne skille: ${query}` : "Wyświetla wszystkie lokalne skille");
+      finish(id, true, `${matches.length} z ${skills.length} włączonych`);
+      return { content: matches.length ? `Znaleziono ${matches.length} z ${skills.length} włączonych lokalnych skilli:\n${formatSkillMatches(matches)}` : `Brak trafień wśród ${skills.length} włączonych skilli.`, isError: false };
+    }
     case "use_skill":
     case "read_skill_file": {
       const skill = findSkill(str(input.name));
@@ -476,7 +472,9 @@ AgentRunner.prototype.executeSkill = async function (this: AgentRunner, conversa
     }
     case "find_skills": {
       const query = str(input.query);
-      const id = action(`Szuka umiejętności „${query}”`);
+      const local = searchInstalledSkills(skills, query);
+      if (local.length) { const id = action(`Znaleziono lokalnie: ${query}`); finish(id, true, `${local.length} lokalnych skilli`); return { content: `Najpierw lokalne (${local.length}):\n${formatSkillMatches(local)}\n\nUżyj use_skill z dokładnym identyfikatorem [key].`, isError: false }; }
+      const id = action(`Szuka umiejętności lokalnie i zdalnie: ${query}`);
       const result = await api.skillSearch(query, self.host.settings().skillSources);
       const found = [...result.catalog, ...result.community];
       finish(id, true, `${found.length} umiejętności, ${result.repos.length} repozytoriów`);

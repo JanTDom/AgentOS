@@ -1,6 +1,6 @@
 [package]
 name = "agentos"
-version = "0.5.2"
+version = "0.5.3"
 description = "AgentOS desktop command center"
 authors = ["AgentOS"]
 edition = "2021"
